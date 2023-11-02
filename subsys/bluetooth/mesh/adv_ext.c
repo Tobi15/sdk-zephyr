@@ -271,12 +271,14 @@ static const char *adv_tag_to_str(enum bt_mesh_adv_tag tag)
 		return "(unknown tag)";
 	}
 }
-
+int my_super_long_int_sending_event = 0;
 static void send_pending_adv(struct k_work *work)
 {
 	struct bt_mesh_ext_adv *adv;
 	struct net_buf *buf;
 	int err;
+
+	my_super_long_int_sending_event++;
 
 	adv = CONTAINER_OF(work, struct bt_mesh_ext_adv, work.work);
 

@@ -263,10 +263,14 @@ int bt_mesh_adv_gatt_send(void)
 
 	return -ENOTSUP;
 }
-
+int my_super_long_int_receiving_event = 0;
 static void bt_mesh_scan_cb(const bt_addr_le_t *addr, int8_t rssi,
 			    uint8_t adv_type, struct net_buf_simple *buf)
 {
+
+	//printk("Callback scan (thread %s)\n", k_thread_name_get(k_current_get()));
+	my_super_long_int_receiving_event++;
+
 	if (adv_type != BT_GAP_ADV_TYPE_ADV_NONCONN_IND) {
 		return;
 	}
