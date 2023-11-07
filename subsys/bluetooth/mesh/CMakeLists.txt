@@ -8,7 +8,6 @@ zephyr_library_sources_ifdef(CONFIG_BT_MESH
     cfg.c
     adv.c
     beacon.c
-    net.c
     subnet.c
     app_keys.c
     heartbeat.c
@@ -24,6 +23,13 @@ if (CONFIG_BT_MESH_V1d1)
 else()
     zephyr_library_sources(transport_legacy.c)
 endif()
+
+if (CONFIG_BT_MESH_HBH)
+	zephyr_library_sources(net_hbh.c net_hbh_impl.c)
+else()
+	zephyr_library_sources(net.c)
+endif()
+
 
 zephyr_library_sources_ifdef(CONFIG_BT_MESH_ADV_LEGACY adv_legacy.c)
 

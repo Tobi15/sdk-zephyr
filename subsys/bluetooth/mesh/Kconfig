@@ -1626,4 +1626,10 @@ config BT_MESH_DEBUG_USE_ID_ADDR
 
 endif # BT_MESH_LOG_LEVEL_DBG
 
+
+config BT_MESH_HBH
+	bool "Enable HBH transport"
+	default n
+	help
+	  Enable HBH transport
 endif # BT_MESH

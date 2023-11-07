@@ -1,3 +1,17 @@
+/*********************************************************************************
+ * @copyright (c) 2023 University of Applied Sciences and Arts Western Switzerland
+ * All rights reserved.
+ *
+ * Unauthorized copying of this file, via any medium is strictly prohibited.
+ * Proprietary and confidential
+ *********************************************************************************
+ * Project : HEIA-FR / tm_ble-mesh_dect-2020
+ * @file   : net_hbh.c
+ * @brief  : 
+ * @date   : 06.11.2023
+ * @author : Louka Yerly (louka.yerly@gmail.com)
+ ********************************************************************************/
+
 /*
  * Copyright (c) 2017 Intel Corporation
  *
@@ -570,6 +584,7 @@ int bt_mesh_net_send(struct bt_mesh_net_tx *tx, struct net_buf *buf,
 		goto done;
 	}
 
+	
 	err = net_encrypt(&buf->b, cred, BT_MESH_NET_IVI_TX, BT_MESH_NONCE_NETWORK);
 	if (err) {
 		goto done;
@@ -642,18 +657,23 @@ static bool net_decrypt(struct bt_mesh_net_rx *rx, struct net_buf_simple *in,
 	}
 
 	rx->ctx.addr = SRC(out->data);
+	rx->seq = SEQ(out->data);
 	if (!BT_MESH_ADDR_IS_UNICAST(rx->ctx.addr)) {
 		LOG_DBG("Ignoring non-unicast src addr 0x%04x", rx->ctx.addr);
 		return false;
 	}
 
 	if (bt_mesh_has_addr(rx->ctx.addr)) {
-		LOG_DBG("Dropping locally originated packet");
+		// TODO: active this part if the HBH is implemented for the sending
+		//printk("Locally originated packet\n");
+		//bt_mesh_net_hbh_recv(rx, out);
+		LOG_DBG("Dropping locally originated packet\n");
 		return false;
 	}
 
 	if (rx->net_if == BT_MESH_NET_IF_ADV && msg_cache_match(out)) {
-		LOG_DBG("Duplicate found in Network Message Cache");
+		bt_mesh_net_hbh_recv(rx, out);
+		printk("Duplicate found in Network Message Cache\n");
 		return false;
 	}
 
@@ -681,7 +701,7 @@ static bool relay_to_adv(enum bt_mesh_net_if net_if)
 	}
 }
 
-static void bt_mesh_net_relay(struct net_buf_simple *sbuf,
+void bt_mesh_net_relay(struct net_buf_simple *sbuf,
 			      struct bt_mesh_net_rx *rx)
 {
 	const struct bt_mesh_net_cred *cred;
@@ -727,7 +747,7 @@ static void bt_mesh_net_relay(struct net_buf_simple *sbuf,
 
 	cred = &rx->sub->keys[SUBNET_KEY_TX_IDX(rx->sub)].msg;
 
-	LOG_DBG("Relaying packet. TTL is now %u", TTL(buf->data));
+	printk("Relaying packet. TTL is now %u\n", TTL(buf->data));
 
 	/* Update NID if RX or RX was with friend credentials */
 	if (rx->friend_cred) {
@@ -788,9 +808,7 @@ int bt_mesh_net_decode(struct net_buf_simple *in, enum bt_mesh_net_if net_if,
 		return -EINVAL;
 	}
 
-	if (net_if == BT_MESH_NET_IF_ADV && check_dup(in)) {
-		return -EINVAL;
-	}
+    // remove check_dup as device need to know if the message is duplicate
 
 	LOG_DBG("%u bytes: %s", in->len, bt_hex(in->data, in->len));
 
@@ -833,11 +851,18 @@ int bt_mesh_net_decode(struct net_buf_simple *in, enum bt_mesh_net_if net_if,
 	return 0;
 }
 
-void bt_mesh_net_recv(struct net_buf_simple *data, int8_t rssi,
-		      enum bt_mesh_net_if net_if)
+void bt_mesh_net_recv2(struct net_buf_simple *data, int8_t rssi,
+		      enum bt_mesh_net_if net_if, const bt_addr_le_t *addr)
 {
 	NET_BUF_SIMPLE_DEFINE(buf, BT_MESH_NET_MAX_PDU_LEN);
-	struct bt_mesh_net_rx rx = { .ctx.recv_rssi = rssi };
+	struct bt_mesh_net_rx rx = { 
+		.bt_addr = addr,
+		.ctx.recv_rssi = rssi
+	};
+	char a[BT_ADDR_LE_STR_LEN+1] = {0};
+	bt_addr_le_to_str(rx.bt_addr, a, sizeof(a)-1);
+	printk("receive from: %s\n", a);
+
 	struct net_buf_simple_state state;
 	int err;
 
@@ -851,12 +876,15 @@ void bt_mesh_net_recv(struct net_buf_simple *data, int8_t rssi,
 		return;
 	}
 
-	/* Save the state so the buffer can later be relayed */
+    /* Save the state so the buffer can later be relayed */
 	net_buf_simple_save(&buf, &state);
 
 	rx.local_match = (bt_mesh_fixed_group_match(rx.ctx.recv_dst) ||
 			  bt_mesh_has_addr(rx.ctx.recv_dst));
+	
+	bt_mesh_net_hbh_recv(&rx, &buf);
 
+	
 	if (IS_ENABLED(CONFIG_BT_MESH_GATT_PROXY) &&
 	    net_if == BT_MESH_NET_IF_PROXY) {
 		bt_mesh_proxy_addr_add(data, rx.ctx.addr);
@@ -887,6 +915,9 @@ void bt_mesh_net_recv(struct net_buf_simple *data, int8_t rssi,
 		LOG_DBG("Not relaying message rejected by the Transport layer");
 		return;
 	}
+
+    // TODO: add packet as tracked
+    
 
 	/* Relay if this was a group/virtual address, or if the destination
 	 * was neither a local element nor an LPN we're Friends for.
