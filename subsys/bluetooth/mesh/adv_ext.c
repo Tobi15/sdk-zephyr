@@ -240,8 +240,13 @@ static int buf_send(struct bt_mesh_ext_adv *adv, struct net_buf *buf)
 
 	LOG_DBG("type %u len %u: %s", BT_MESH_ADV(buf)->type,
 	       buf->len, bt_hex(buf->data, buf->len));
-	LOG_DBG("count %u interval %ums duration %ums",
+	LOG_ERR("count %u interval %ums duration %ums",
 	       num_events, adv_int, duration);
+
+	static int64_t time = 0;
+	if(time == 0) time = k_uptime_get();
+	LOG_ERR("Time between two consecutive sends: %lli ms", k_uptime_delta(&time));
+	time = k_uptime_get();
 
 	ad.type = bt_mesh_adv_type[BT_MESH_ADV(buf)->type];
 	ad.data_len = buf->len;
@@ -287,7 +292,7 @@ static void send_pending_adv(struct k_work *work)
 		 */
 		int64_t duration = k_uptime_delta(&adv->timestamp);
 
-		LOG_DBG("Advertising stopped after %u ms for (%u) %s", (uint32_t)duration, adv->tag,
+		LOG_ERR("Advertising stopped after %u ms for (%u) %s", (uint32_t)duration, adv->tag,
 		       adv_tag_to_str(adv->tag));
 
 		atomic_clear_bit(adv->flags, ADV_FLAG_ACTIVE);
