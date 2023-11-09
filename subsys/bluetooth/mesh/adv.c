@@ -296,11 +296,11 @@ static void bt_mesh_scan_cb(const bt_addr_le_t *addr, int8_t rssi,
 
 		switch (type) {
 		case BT_DATA_MESH_MESSAGE:
-			if(IS_ENABLED(CONFIG_BT_MESH_HBH)) {
-				bt_mesh_net_recv2(buf, rssi, BT_MESH_NET_IF_ADV, addr);
-			} else {
+#if defined(CONFIG_BT_MESH_HBH)
+				bt_mesh_net_recv(buf, rssi, BT_MESH_NET_IF_ADV, addr);
+#else
 				bt_mesh_net_recv(buf, rssi, BT_MESH_NET_IF_ADV);
-			}
+#endif
 			break;
 #if defined(CONFIG_BT_MESH_PB_ADV)
 		case BT_DATA_MESH_PROV:
