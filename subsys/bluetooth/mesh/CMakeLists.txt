@@ -8,6 +8,7 @@ zephyr_library_sources_ifdef(CONFIG_BT_MESH
     cfg.c
     adv.c
     beacon.c
+    net.c
     subnet.c
     app_keys.c
     heartbeat.c
@@ -25,9 +26,7 @@ else()
 endif()
 
 if (CONFIG_BT_MESH_HBH)
-	zephyr_library_sources(net_hbh.c net_hbh_impl.c)
-else()
-	zephyr_library_sources(net.c)
+    zephyr_library_sources(net_hbh_impl.c)
 endif()
 
 
