@@ -643,9 +643,8 @@ static bool net_decrypt(struct bt_mesh_net_rx *rx, struct net_buf_simple *in,
 		return false;
 	}
 
-	rx->ctx.addr = SRC(out->data);
 	rx->seq = SEQ(out->data);
-	rx->ctx.recv_dst = DST(out->data);
+	rx->ctx.addr = SRC(out->data);
 	if (!BT_MESH_ADDR_IS_UNICAST(rx->ctx.addr)) {
 		LOG_DBG("Ignoring non-unicast src addr 0x%04x", rx->ctx.addr);
 		return false;
