@@ -271,14 +271,12 @@ static const char *adv_tag_to_str(enum bt_mesh_adv_tag tag)
 		return "(unknown tag)";
 	}
 }
-int my_super_long_int_sending_event = 0;
-static int64_t send_time = 0;
+
 static void send_pending_adv(struct k_work *work)
 {
 	struct bt_mesh_ext_adv *adv;
 	struct net_buf *buf;
 	int err;
-
 
 	adv = CONTAINER_OF(work, struct bt_mesh_ext_adv, work.work);
 
@@ -313,9 +311,7 @@ static void send_pending_adv(struct k_work *work)
 			net_buf_unref(buf);
 			continue;
 		}
-		//printk("last send delta: %lli\n", k_uptime_delta(&send_time));
-		my_super_long_int_sending_event++;
-		send_time = k_uptime_get();
+
 		BT_MESH_ADV(buf)->busy = 0U;
 		err = buf_send(adv, buf);
 
@@ -420,8 +416,6 @@ void bt_mesh_adv_init(void)
 		.id = BT_ID_DEFAULT,
 		.interval_min = BT_MESH_ADV_SCAN_UNIT(ADV_INT_FAST_MS),
 		.interval_max = BT_MESH_ADV_SCAN_UNIT(ADV_INT_FAST_MS),
-		//.options = BT_LE_ADV_OPT_CODED
-		.options = BT_LE_ADV_OPT_USE_IDENTITY,
 #if defined(CONFIG_BT_MESH_DEBUG_USE_ID_ADDR)
 		.options = BT_LE_ADV_OPT_USE_IDENTITY,
 #endif
