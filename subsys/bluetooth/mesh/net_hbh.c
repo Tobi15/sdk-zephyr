@@ -840,7 +840,7 @@ int bt_mesh_net_decode(struct net_buf_simple *in, enum bt_mesh_net_if net_if,
 }
 
 #if defined(CONFIG_BT_MESH_HBH)
-void bt_mesh_net_recv2(struct net_buf_simple *data, int8_t rssi,
+void bt_mesh_net_recv(struct net_buf_simple *data, int8_t rssi,
 		      enum bt_mesh_net_if net_if, const bt_addr_le_t *addr)
 #else
 void bt_mesh_net_recv(struct net_buf_simple *data, int8_t rssi,
