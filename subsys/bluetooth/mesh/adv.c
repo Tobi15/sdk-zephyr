@@ -263,18 +263,16 @@ int bt_mesh_adv_gatt_send(void)
 
 	return -ENOTSUP;
 }
-volatile int my_super_long_int_receiving_event = 0;
-K_SEM_DEFINE(my_super_long_int_receiving_event_sem, 0, 1);
+
 static void bt_mesh_scan_cb(const bt_addr_le_t *addr, int8_t rssi,
 			    uint8_t adv_type, struct net_buf_simple *buf)
 {
-
 	if (adv_type != BT_GAP_ADV_TYPE_ADV_NONCONN_IND) {
 		return;
 	}
 
 	LOG_DBG("len %u: %s", buf->len, bt_hex(buf->data, buf->len));
-	
+
 	while (buf->len > 1) {
 		struct net_buf_simple_state state;
 		uint8_t len, type;
@@ -284,8 +282,6 @@ static void bt_mesh_scan_cb(const bt_addr_le_t *addr, int8_t rssi,
 		if (len == 0U) {
 			return;
 		}
-
-		
 
 		if (len > buf->len) {
 			LOG_WRN("AD malformed");
@@ -297,18 +293,14 @@ static void bt_mesh_scan_cb(const bt_addr_le_t *addr, int8_t rssi,
 		type = net_buf_simple_pull_u8(buf);
 
 		buf->len = len - 1;
-		static int64_t myy_time = 0;
-		char addr_str[BT_ADDR_LE_STR_LEN+1] = {0};
-		bt_addr_le_to_str(addr,  addr_str, sizeof(addr_str)-1);
+
 		switch (type) {
 		case BT_DATA_MESH_MESSAGE:
-			//printk("addr: %s\n", addr_str);
-			//printk("Callback scan (thread %s)\n", k_thread_name_get(k_current_get()));
-			//printk("delta %lli)\n", k_uptime_delta(&myy_time));
-			//myy_time = k_uptime_get();
-			//k_sem_give(&my_super_long_int_receiving_event_sem);
-			//my_super_long_int_receiving_event++;
-			bt_mesh_net_recv2(buf, rssi, BT_MESH_NET_IF_ADV, addr);
+			if(IS_ENABLED(CONFIG_BT_MESH_HBH)) {
+				bt_mesh_net_recv2(buf, rssi, BT_MESH_NET_IF_ADV, addr);
+			} else {
+				bt_mesh_net_recv(buf, rssi, BT_MESH_NET_IF_ADV);
+			}
 			break;
 #if defined(CONFIG_BT_MESH_PB_ADV)
 		case BT_DATA_MESH_PROV:
