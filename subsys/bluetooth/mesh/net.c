@@ -894,7 +894,7 @@ void bt_mesh_net_recv(struct net_buf_simple *data, int8_t rssi,
 	if (!BT_MESH_ADDR_IS_UNICAST(rx.ctx.recv_dst) ||
 	    (!rx.local_match && !rx.friend_match)) {
 		net_buf_simple_restore(&buf, &state);
-		//bt_mesh_net_relay(&buf, &rx);
+		bt_mesh_net_relay(&buf, &rx);
 	}
 }
 
