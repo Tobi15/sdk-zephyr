@@ -253,7 +253,9 @@ enum bt_mesh_net_if {
 struct bt_mesh_net_rx {
 	struct bt_mesh_subnet *sub;
 	struct bt_mesh_msg_ctx ctx;
-	const bt_addr_le_t *bt_addr;
+#if defined(CONFIG_BT_MESH_HBH)
+	bt_addr_le_t bt_addr;
+#endif
 	uint32_t  seq;            /* Sequence Number */
 	uint8_t   old_iv:1,       /* iv_index - 1 was used */
 	       new_key:1,      /* Data was encrypted with updated key */
