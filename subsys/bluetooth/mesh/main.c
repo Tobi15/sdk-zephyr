@@ -507,7 +507,7 @@ static void model_start(struct bt_mesh_model *mod, struct bt_mesh_elem *elem,
 int bt_mesh_start(void)
 {
 	int err;
-	
+
 	if(IS_ENABLED(CONFIG_BT_MESH_HBH)) {
 		bt_mesh_net_hbh_init();
 	}

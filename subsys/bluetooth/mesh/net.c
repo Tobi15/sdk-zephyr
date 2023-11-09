@@ -858,7 +858,7 @@ void bt_mesh_net_recv(struct net_buf_simple *data, int8_t rssi,
 		bt_addr_le_to_str(&rx.bt_addr, a, sizeof(a)-1);
 		//printk("receive from: %s\n", a);
 	}
-	
+
 	struct net_buf_simple_state state;
 	int err;
 

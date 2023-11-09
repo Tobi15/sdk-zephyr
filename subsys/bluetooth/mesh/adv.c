@@ -297,9 +297,9 @@ static void bt_mesh_scan_cb(const bt_addr_le_t *addr, int8_t rssi,
 		switch (type) {
 		case BT_DATA_MESH_MESSAGE:
 #if defined(CONFIG_BT_MESH_HBH)
-				bt_mesh_net_recv(buf, rssi, BT_MESH_NET_IF_ADV, addr);
+			bt_mesh_net_recv(buf, rssi, BT_MESH_NET_IF_ADV, addr);
 #else
-				bt_mesh_net_recv(buf, rssi, BT_MESH_NET_IF_ADV);
+			bt_mesh_net_recv(buf, rssi, BT_MESH_NET_IF_ADV);
 #endif
 			break;
 #if defined(CONFIG_BT_MESH_PB_ADV)
