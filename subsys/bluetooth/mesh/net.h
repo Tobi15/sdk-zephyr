@@ -342,3 +342,12 @@ static inline void send_cb_finalize(const struct bt_mesh_send_cb *cb,
 		cb->end(0, cb_data);
 	}
 }
+
+#if defined(CONFIG_BT_MESH_HBH)
+void bt_mesh_net_hbh_init(void);
+void bt_mesh_net_hbh_send(struct bt_mesh_net_tx *tx,
+							struct net_buf *buf,
+							uint32_t seq);
+void bt_mesh_net_hbh_recv(struct bt_mesh_net_rx *rx,
+							struct net_buf_simple *buf); 
+#endif

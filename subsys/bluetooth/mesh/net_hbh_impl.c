@@ -172,7 +172,7 @@ static bool bt_mesh_net_hbh_is_iack(struct net_hbh_item *recv_item) {
 }
 
 
-void bt_mesh_net_hbh_create_item(struct net_hbh_item *item, 
+static void bt_mesh_net_hbh_create_item(struct net_hbh_item *item, 
                                  struct bt_mesh_net_rx *rx,
                                  struct net_buf_simple *buf) {
 
@@ -214,7 +214,7 @@ static void bt_mesh_net_hbh_free_expired() {
 }
 */
 
-void print_packet_info(struct net_hbh_item *item) {
+static void print_packet_info(struct net_hbh_item *item) {
     return;
     char src[BT_ADDR_LE_STR_LEN+1] = {0};
     bt_addr_le_to_str(&item->rx.bt_addr, src, sizeof(src)-1);
@@ -325,7 +325,7 @@ void bt_mesh_net_hbh_recv(struct bt_mesh_net_rx *rx,
 
 
 
-void bt_mesh_net_hbh_init() {
+void bt_mesh_net_hbh_init(void) {
 	printk("\n\n\nINITIALIZE HBH\n\n\n");
 	for(int i=0; i<ARRAY_SIZE(net_hbh_item_arr); i++) {
 		struct net_hbh_item* item = &net_hbh_item_arr[i];
