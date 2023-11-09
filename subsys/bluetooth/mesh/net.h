@@ -300,8 +300,13 @@ int bt_mesh_net_send(struct bt_mesh_net_tx *tx, struct net_buf *buf,
 int bt_mesh_net_decode(struct net_buf_simple *in, enum bt_mesh_net_if net_if,
 		       struct bt_mesh_net_rx *rx, struct net_buf_simple *out);
 
+#if defined(CONFIG_BT_MESH_HBH)
+void bt_mesh_net_recv(struct net_buf_simple *data, int8_t rssi,
+		      enum bt_mesh_net_if net_if, const bt_addr_le_t *addr);
+#else
 void bt_mesh_net_recv(struct net_buf_simple *data, int8_t rssi,
 		      enum bt_mesh_net_if net_if);
+#endif
 
 void bt_mesh_net_loopback_clear(uint16_t net_idx);
 
