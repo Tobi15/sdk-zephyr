@@ -404,7 +404,7 @@ static int cmd_polltimeout_get(const struct shell *sh, size_t argc, char *argv[]
 	return 0;
 }
 
-static int cmd_net_transmit(const struct shell *sh, size_t argc, char *argv[])
+int cmd_net_transmit(const struct shell *sh, size_t argc, char *argv[])
 {
 	uint8_t transmit;
 	int err = 0;
@@ -650,7 +650,7 @@ static int cmd_net_key_del(const struct shell *sh, size_t argc, char *argv[])
 	return 0;
 }
 
-static int cmd_app_key_add(const struct shell *sh, size_t argc, char *argv[])
+int cmd_app_key_add(const struct shell *sh, size_t argc, char *argv[])
 {
 	uint8_t key_val[16];
 	uint16_t key_net_idx, key_app_idx;

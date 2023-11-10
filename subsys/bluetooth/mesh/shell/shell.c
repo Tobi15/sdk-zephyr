@@ -47,10 +47,7 @@ struct bt_mesh_shell_target bt_mesh_shell_target_ctx = {
 		} while (0)
 
 /* Default net, app & dev key values, unless otherwise specified */
-const uint8_t bt_mesh_shell_default_key[16] = {
-	0x01, 0x23, 0x45, 0x67, 0x89, 0xab, 0xcd, 0xef,
-	0x01, 0x23, 0x45, 0x67, 0x89, 0xab, 0xcd, 0xef,
-};
+const uint8_t bt_mesh_shell_default_key[16] = { 0 };
 
 #if defined(CONFIG_BT_MESH_SHELL_HEALTH_SRV_INSTANCE)
 static uint8_t cur_faults[BT_MESH_SHELL_CUR_FAULTS_MAX];
@@ -220,6 +217,11 @@ struct bt_mesh_health_cli bt_mesh_shell_health_cli = {
 };
 #endif /* CONFIG_BT_MESH_SHELL_HEALTH_CLI */
 
+static int cmd_provision_local(const struct shell *sh, size_t argc, char *argv[]);
+static int cmd_dst(const struct shell *sh, size_t argc, char *argv[]);
+static int cmd_netidx(const struct shell *sh, size_t argc, char *argv[]);
+static int cmd_appidx(const struct shell *sh, size_t argc, char *argv[]);
+
 static int cmd_init(const struct shell *sh, size_t argc, char *argv[])
 {
 
@@ -237,6 +239,21 @@ static int cmd_init(const struct shell *sh, size_t argc, char *argv[])
 	if (IS_ENABLED(CONFIG_BT_MESH_RPR_SRV)) {
 		bt_mesh_prov_enable(BT_MESH_PROV_REMOTE);
 	}
+
+	int sleep_between_cmd = 100;
+	// command to be run at init
+	char* argv1[] = {"", "0", "0x0001"};
+	cmd_provision_local(sh, 3, argv1);
+	char* argv2[] = {"", "0", "0"};
+	cmd_app_key_add(sh, 3, argv2);
+	char* argv4[] = {"", "0", "20"};
+	cmd_net_transmit(sh, 3, argv4);
+	char* argv5[] = {"", "0x566a"};
+	cmd_dst(sh, 2, argv5);
+	char* argv6[] = {"", "0"};
+	cmd_netidx(sh, 2, argv6);
+	char* argv7[] = {"", "0"};
+	cmd_appidx(sh, 2, argv7);
 
 	return 0;
 }
