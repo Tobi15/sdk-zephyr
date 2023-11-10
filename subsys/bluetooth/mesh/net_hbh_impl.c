@@ -51,9 +51,11 @@ LOG_MODULE_REGISTER(bt_mesh_net_hbh_impl);
 
 
 #define BT_MESH_NET_HBH_RTO_SECS 2
-#define BT_MESH_NET_HBH_MSG_CACHE_TIMEOUT_MSEC 10*1000
 #define BT_MESH_NET_HBH_MAX_RETRANSMISSION 10
-
+#define BT_MESH_NET_HBH_MAX_HOP_DELAY_MSEC 60
+#define BT_MESH_NET_HBH_MSG_CACHE_TIMEOUT_MSEC ((BT_MESH_NET_HBH_RTO_SECS*MSEC_PER_SEC*\
+												BT_MESH_NET_HBH_MAX_RETRANSMISSION)*2\
+												+ BT_MESH_NET_HBH_MAX_HOP_DELAY_MSEC)
 
 struct net_hbh_item {
     struct bt_mesh_net_rx rx;
@@ -65,7 +67,10 @@ struct net_hbh_item {
         struct net_buf *tx_buf;
     };
     uint8_t transmit_number;
+
+	struct k_mutex recv_timestamp_mut;
     int64_t recv_timestamp;
+
     bool is_src;
     bool acked;
 	atomic_t is_free;
@@ -77,7 +82,25 @@ static struct net_hbh_item net_hbh_item_arr[10];
 #define IS_ITEM_FREE(x)  (atomic_get(&x->is_free) == ITEM_FREE)
 #define SET_ITEM_USED(x) (atomic_set(&x->is_free, ITEM_USED))
 #define SET_ITEM_FREE(x) (atomic_set(&x->is_free, ITEM_FREE))
-
+static inline int64_t item_get_timestamp(struct net_hbh_item *item) {
+	int64_t res;
+	k_mutex_lock(&item->recv_timestamp_mut, K_FOREVER);
+	res = item->recv_timestamp;
+	k_mutex_unlock(&item->recv_timestamp_mut);
+	return res;
+}
+static inline void item_set_timestamp(struct net_hbh_item *item, int64_t val) {
+	k_mutex_lock(&item->recv_timestamp_mut, K_FOREVER);
+	item->recv_timestamp = val;
+	k_mutex_unlock(&item->recv_timestamp_mut);
+}
+static inline int64_t item_get_timestamp_delta(struct net_hbh_item *item) {
+	int64_t ref = item_get_timestamp(item);
+	return k_uptime_delta(&ref);
+}
+static inline int64_t item_get_remaining_time_msec(struct net_hbh_item *item) {
+	return BT_MESH_NET_HBH_MSG_CACHE_TIMEOUT_MSEC-(k_uptime_get()-item_get_timestamp(item))+1;
+}
 
 
 static void bt_mesh_net_hbh_free_item(struct net_hbh_item *item) {
@@ -109,13 +132,16 @@ static void retransmit(struct k_work *work) {
     struct k_work_delayable *dwork = k_work_delayable_from_work(work);
     struct net_hbh_item *item = CONTAINER_OF(dwork, struct net_hbh_item, dwork);
     
-    if(k_uptime_delta(&item->recv_timestamp) > BT_MESH_NET_HBH_MSG_CACHE_TIMEOUT_MSEC ||
-		item->transmit_number >= BT_MESH_NET_HBH_MAX_RETRANSMISSION) {
-        
+    if(item_get_timestamp_delta(item) >= BT_MESH_NET_HBH_MSG_CACHE_TIMEOUT_MSEC) {
 		// free the msg as he exceded the life time
         bt_mesh_net_hbh_free_item(item);
         return;
     }
+
+	if(item->transmit_number == BT_MESH_NET_HBH_MAX_RETRANSMISSION) {
+		k_work_reschedule(dwork, K_MSEC(item_get_remaining_time_msec(item)));
+		return;
+	}
     
     item->transmit_number++;
 
@@ -129,9 +155,8 @@ static void retransmit(struct k_work *work) {
 
 
     if(bt_mesh_has_addr(item->rx.ctx.recv_dst)) {
-        // It is the last node, he will never receive an ACK
-        // TODO: reshedule with delta
-        k_work_reschedule(dwork, K_MSEC(BT_MESH_NET_HBH_MSG_CACHE_TIMEOUT_MSEC));
+		// if it is the last node, he will never receive an ACK
+        k_work_reschedule(dwork, K_MSEC(item_get_remaining_time_msec(item)));
     } else {
         k_work_reschedule(dwork, K_SECONDS(BT_MESH_NET_HBH_RTO_SECS));
     }
@@ -193,26 +218,11 @@ static void bt_mesh_net_hbh_create_item(struct net_hbh_item *item,
 
     item->transmit_number = 0;
 
-    item->recv_timestamp = k_uptime_get();
+	item_set_timestamp(item, k_uptime_get());
 
     k_work_init_delayable(&item->dwork, retransmit); 
 }
 
-
-/*
-static void bt_mesh_net_hbh_free_expired() {
-    for(int i=0; i<ARRAY_SIZE(net_hbh_item_arr); i++) {
-        struct net_hbh_item* item = &net_hbh_item_arr[i];
-
-        bool expired = k_uptime_delta(&item->recv_timestamp) > BT_MESH_NET_HBH_MSG_CACHE_TIMEOUT_MSEC;
-        
-        if(expired) {
-            printk("Remove expired packet\n");
-            bt_mesh_net_hbh_free_item(item);
-        }
-    }
-}
-*/
 
 static void print_packet_info(struct net_hbh_item *item) {
     return;
@@ -245,12 +255,11 @@ void bt_mesh_net_hbh_send(struct bt_mesh_net_tx *tx,
     item->is_src = true;
     item->acked = false;
 
-    item->recv_timestamp = k_uptime_get();
+    item_set_timestamp(item, k_uptime_get());
 
 
-    size_t count = 1;
-    
-	// HARDCODED: take the first possible address... Maybe it's another
+    // HARDCODED: take the first possible address... Maybe it's another
+	size_t count = 1;
 	bt_id_get(&item->rx.bt_addr, &count);
     char addr_str[BT_ADDR_LE_STR_LEN+1] = {0};
     bt_addr_le_to_str(&item->rx.bt_addr, addr_str, sizeof(addr_str)-1);
@@ -304,16 +313,19 @@ void bt_mesh_net_hbh_recv(struct bt_mesh_net_rx *rx,
     }
 
     if(bt_mesh_net_hbh_is_iack(&recv_item)) {
-        // set message as acked
-        if(cached->acked) {
+		
+		if(cached->acked) {
             // possible if a ack is already received
             return;
         }
-        cached->acked = true;
-        int64_t remaining = BT_MESH_NET_HBH_MSG_CACHE_TIMEOUT_MSEC-(k_uptime_get()-cached->recv_timestamp);
+        
+		cached->acked = true;
+        
         printk("(set message acked)\n");
         print_packet_info(cached);
-        k_work_reschedule(&cached->dwork, K_MSEC(remaining));
+        
+		int64_t remaining = item_get_remaining_time_msec(cached);
+		k_work_reschedule(&cached->dwork, K_MSEC(remaining));
         return;
     }
     
@@ -330,6 +342,7 @@ void bt_mesh_net_hbh_init(void) {
 	for(int i=0; i<ARRAY_SIZE(net_hbh_item_arr); i++) {
 		struct net_hbh_item* item = &net_hbh_item_arr[i];
 
+		k_mutex_init(&item->recv_timestamp_mut);
 		SET_ITEM_FREE(item);
 	}
 }
