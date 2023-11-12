@@ -253,9 +253,6 @@ enum bt_mesh_net_if {
 struct bt_mesh_net_rx {
 	struct bt_mesh_subnet *sub;
 	struct bt_mesh_msg_ctx ctx;
-#if defined(CONFIG_BT_MESH_HBH)
-	bt_addr_le_t bt_addr;
-#endif
 	uint32_t  seq;            /* Sequence Number */
 	uint8_t   old_iv:1,       /* iv_index - 1 was used */
 	       new_key:1,      /* Data was encrypted with updated key */
@@ -264,6 +261,10 @@ struct bt_mesh_net_rx {
 	       net_if:2,       /* Network interface */
 	       local_match:1,  /* Matched a local element */
 	       friend_match:1; /* Matched an LPN we're friends for */
+#if defined(CONFIG_BT_MESH_HBH)
+	bt_addr_le_t bt_addr;
+	uint8_t iack:1;
+#endif
 };
 
 /* Encoding context for Network/Transport data */
@@ -345,6 +346,8 @@ static inline void send_cb_finalize(const struct bt_mesh_send_cb *cb,
 
 #if defined(CONFIG_BT_MESH_HBH)
 void bt_mesh_net_hbh_init(void);
+void bt_mesh_net_hbh_iack(struct bt_mesh_net_rx *rx,
+						  struct net_buf_simple *buf);
 void bt_mesh_net_hbh_send(struct bt_mesh_net_tx *tx,
 							struct net_buf *buf,
 							uint32_t seq);

@@ -49,6 +49,7 @@
 #include <zephyr/logging/log.h>
 LOG_MODULE_REGISTER(bt_mesh_net_hbh_impl);
 
+#define SEQ(pdu) (sys_get_be24(&pdu[2]))
 
 #define BT_MESH_NET_HBH_RTO_SECS 2
 #define BT_MESH_NET_HBH_MAX_RETRANSMISSION 10
@@ -207,20 +208,14 @@ static void bt_mesh_net_hbh_create_item(struct net_hbh_item *item,
 
     memcpy(&item->rx, rx, sizeof(struct bt_mesh_net_rx));
     
-
-    item->data_decoded.len = buf->len;
-    item->data_decoded.size = sizeof(item->data_buffer);
-    item->data_decoded.data = item->data_buffer;
-    item->data_decoded.__buf = item->data_buffer;
-    memcpy(item->data_decoded.data, buf->data, buf->len);
-
+	net_buf_simple_reset(&item->data_decoded);
+	net_buf_simple_add_mem(&item->data_decoded, buf->data, buf->len);
+    
     item->acked = false;
 
     item->transmit_number = 0;
 
-	item_set_timestamp(item, k_uptime_get());
-
-    k_work_init_delayable(&item->dwork, retransmit); 
+	item_set_timestamp(item, k_uptime_get()); 
 }
 
 
@@ -235,6 +230,19 @@ static void print_packet_info(struct net_hbh_item *item) {
 \tseq: %i\n\
 ",
 src, item->rx.ctx.addr, item->rx.ctx.recv_dst, item->rx.seq);
+}
+
+void bt_mesh_net_hbh_iack(struct bt_mesh_net_rx *rx,
+						  struct net_buf_simple *buf) {
+
+	/* check if iack is set */
+	rx->iack = (SEQ(buf) & BIT(23))>0;
+	
+	if(rx->iack) {
+		printk("IACK BIT SET\n");
+		buf->data[2] &= ~BIT(7);
+	}
+	
 }
 
 void bt_mesh_net_hbh_send(struct bt_mesh_net_tx *tx,
@@ -287,9 +295,6 @@ void bt_mesh_net_hbh_send(struct bt_mesh_net_tx *tx,
 void bt_mesh_net_hbh_recv(struct bt_mesh_net_rx *rx,
                           struct net_buf_simple *buf) {
 
-    //printk("sizeof(item)=%i\n", sizeof(struct net_hbh_item));
-    //bt_mesh_net_hbh_free_expired();
-
     printk("src: %#04x, dst: %#04x\n", rx->ctx.addr, rx->ctx.recv_dst);
 
     static struct net_hbh_item recv_item;
@@ -313,7 +318,7 @@ void bt_mesh_net_hbh_recv(struct bt_mesh_net_rx *rx,
     }
 
     if(bt_mesh_net_hbh_is_iack(&recv_item)) {
-		
+
 		if(cached->acked) {
             // possible if a ack is already received
             return;
@@ -329,10 +334,13 @@ void bt_mesh_net_hbh_recv(struct bt_mesh_net_rx *rx,
         return;
     }
     
-    // message is a retransmission of the sender. Need to send and Oriented-iACK
-    printk("(need to send iack)\n");
-    print_packet_info(cached);
-    k_work_reschedule(&cached->dwork, K_NO_WAIT);    
+	if(!rx->iack) {
+		// message is a retransmission of the sender not marked as iack. 
+		// Need to send and Oriented-iACK
+		printk("(need to send iack)\n");
+		print_packet_info(cached);
+		k_work_reschedule(&cached->dwork, K_NO_WAIT);
+	}
 }
 
 
@@ -342,7 +350,18 @@ void bt_mesh_net_hbh_init(void) {
 	for(int i=0; i<ARRAY_SIZE(net_hbh_item_arr); i++) {
 		struct net_hbh_item* item = &net_hbh_item_arr[i];
 
+		/* init net_buf_simple */
+		item->data_decoded.data = item->data_buffer;
+    	item->data_decoded.__buf = item->data_buffer;
+		item->data_decoded.size = sizeof(item->data_buffer);
+
+		/* init timestamp */
 		k_mutex_init(&item->recv_timestamp_mut);
+
+		/* init delayable work */
+		k_work_init_delayable(&item->dwork, retransmit);
+
+		/* set item as free */
 		SET_ITEM_FREE(item);
 	}
 }

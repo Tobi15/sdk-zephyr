@@ -821,7 +821,7 @@ int bt_mesh_net_decode(struct net_buf_simple *in, enum bt_mesh_net_if net_if,
 	}
 
 	rx->ctl = CTL(out->data);
-	rx->seq = SEQ(out->data);
+	//rx->seq = SEQ(out->data); Not necessary
 	rx->ctx.recv_dst = DST(out->data);
 
 	LOG_DBG("Decryption successful. Payload len %u", out->len);
@@ -865,6 +865,10 @@ void bt_mesh_net_recv(struct net_buf_simple *data, int8_t rssi,
 
 	if (!bt_mesh_is_provisioned()) {
 		return;
+	}
+
+	if(IS_ENABLED(CONFIG_BT_MESH_HBH)) {
+		bt_mesh_net_hbh_iack(data);
 	}
 
 	if (bt_mesh_net_decode(data, net_if, &rx, &buf)) {
