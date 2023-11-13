@@ -589,7 +589,9 @@ int bt_mesh_net_send(struct bt_mesh_net_tx *tx, struct net_buf *buf,
 	}
 
 	// substract 1 to seq cause it contains the next seq number
-	bt_mesh_net_hbh_send(tx, buf, bt_mesh.seq-1);
+	if(IS_ENABLED(CONFIG_BT_MESH_HBH)) {
+		bt_mesh_net_hbh_send(tx, buf, bt_mesh.seq-1);
+	}
 	bt_mesh_adv_send(buf, cb, cb_data);
 
 done:
@@ -651,15 +653,14 @@ static bool net_decrypt(struct bt_mesh_net_rx *rx, struct net_buf_simple *in,
 	}
 
 	if (bt_mesh_has_addr(rx->ctx.addr)) {
-		// TODO: active this part if the HBH is implemented for the sending
-		//printk("Locally originated packet\n");
-		bt_mesh_net_hbh_recv(rx, out);
+		/* ack for locally originated packet */
+		bt_mesh_net_hbh_recv(rx, NULL);
 		LOG_DBG("Dropping locally originated packet");
 		return false;
 	}
 
 	if (rx->net_if == BT_MESH_NET_IF_ADV && msg_cache_match(out)) {
-		bt_mesh_net_hbh_recv(rx, out);
+		bt_mesh_net_hbh_recv(rx, NULL);
 		printk("Duplicate found in Network Message Cache\n");
 		return false;
 	}
@@ -688,7 +689,7 @@ static bool relay_to_adv(enum bt_mesh_net_if net_if)
 	}
 }
 
-void bt_mesh_net_relay(struct net_buf_simple *sbuf,
+static void bt_mesh_net_relay(struct net_buf_simple *sbuf,
 			      struct bt_mesh_net_rx *rx)
 {
 	const struct bt_mesh_net_cred *cred;
@@ -734,7 +735,7 @@ void bt_mesh_net_relay(struct net_buf_simple *sbuf,
 
 	cred = &rx->sub->keys[SUBNET_KEY_TX_IDX(rx->sub)].msg;
 
-	printk("Relaying packet. TTL is now %u\n", TTL(buf->data));
+	LOG_DBG("Relaying packet. TTL is now %u\n", TTL(buf->data));
 
 	/* Update NID if RX or RX was with friend credentials */
 	if (rx->friend_cred) {
@@ -751,11 +752,6 @@ void bt_mesh_net_relay(struct net_buf_simple *sbuf,
 		goto done;
 	}
 
-	if(IS_ENABLED(CONFIG_BT_MESH_HBH)) {
-		// set the iack if needed
-		bt_mesh_net_hbh_set_iack(buf);
-	}
-
 	/* When the Friend node relays message for lpn, the message will be
 	 * retransmitted using the managed flooding security credentials and
 	 * the Network PDU shall be retransmitted to all network interfaces.
@@ -768,7 +764,11 @@ void bt_mesh_net_relay(struct net_buf_simple *sbuf,
 	}
 
 	if (relay_to_adv(rx->net_if) || rx->friend_cred) {
-		bt_mesh_adv_send(buf, NULL, NULL);
+		if(IS_ENABLED(CONFIG_BT_MESH_HBH)) {
+			bt_mesh_net_hbh_recv(rx, buf);
+		} else {
+			bt_mesh_adv_send(buf, NULL, NULL);
+		}
 	}
 
 done:
@@ -873,7 +873,7 @@ void bt_mesh_net_recv(struct net_buf_simple *data, int8_t rssi,
 	}
 
 	if(IS_ENABLED(CONFIG_BT_MESH_HBH)) {
-		bt_mesh_net_hbh_iack(&rx, data);
+		bt_mesh_net_hbh_check_iack(&rx, data);
 	}
 
 	if (bt_mesh_net_decode(data, net_if, &rx, &buf)) {
@@ -886,7 +886,6 @@ void bt_mesh_net_recv(struct net_buf_simple *data, int8_t rssi,
 	rx.local_match = (bt_mesh_fixed_group_match(rx.ctx.recv_dst) ||
 			  bt_mesh_has_addr(rx.ctx.recv_dst));
 
-	bt_mesh_net_hbh_recv(&rx, &buf);
 
 	if (IS_ENABLED(CONFIG_BT_MESH_GATT_PROXY) &&
 	    net_if == BT_MESH_NET_IF_PROXY) {
@@ -922,8 +921,9 @@ void bt_mesh_net_recv(struct net_buf_simple *data, int8_t rssi,
 	/* Relay if this was a group/virtual address, or if the destination
 	 * was neither a local element nor an LPN we're Friends for.
 	 */
-	if (!IS_ENABLED(CONFIG_BT_MESH_HBH) && (!BT_MESH_ADDR_IS_UNICAST(rx.ctx.recv_dst) ||
-	    (!rx.local_match && !rx.friend_match))) {
+	if (IS_ENABLED(CONFIG_BT_MESH_HBH) ||
+		!BT_MESH_ADDR_IS_UNICAST(rx.ctx.recv_dst) ||
+			(!rx.local_match && !rx.friend_match)) {
 		net_buf_simple_restore(&buf, &state);
 		bt_mesh_net_relay(&buf, &rx);
 	}
