@@ -83,6 +83,7 @@ static struct net_hbh_item net_hbh_item_arr[10];
 #define IS_ITEM_FREE(x)  (atomic_get(&x->is_free) == ITEM_FREE)
 #define SET_ITEM_USED(x) (atomic_set(&x->is_free, ITEM_USED))
 #define SET_ITEM_FREE(x) (atomic_set(&x->is_free, ITEM_FREE))
+#define SET_ITEM_ORIENTED_IACK(x) (x->data_decoded.data[2] |= BIT(7))
 static inline int64_t item_get_timestamp(struct net_hbh_item *item) {
 	int64_t res;
 	k_mutex_lock(&item->recv_timestamp_mut, K_FOREVER);
@@ -208,6 +209,9 @@ static void bt_mesh_net_hbh_create_item(struct net_hbh_item *item,
 
     memcpy(&item->rx, rx, sizeof(struct bt_mesh_net_rx));
     
+	item->data_decoded.data = item->data_buffer;
+	item->data_decoded.__buf = item->data_buffer;
+	item->data_decoded.size = sizeof(item->data_buffer);
 	net_buf_simple_reset(&item->data_decoded);
 	net_buf_simple_add_mem(&item->data_decoded, buf->data, buf->len);
     
@@ -236,19 +240,32 @@ void bt_mesh_net_hbh_iack(struct bt_mesh_net_rx *rx,
 						  struct net_buf_simple *buf) {
 
 	/* check if iack is set */
-	rx->iack = (SEQ(buf) & BIT(23))>0;
+	rx->iack_bit = (SEQ(buf->data) & BIT(23))>0;
 	
-	if(rx->iack) {
+	if(rx->iack_bit) {
 		printk("IACK BIT SET\n");
 		buf->data[2] &= ~BIT(7);
 	}
 	
 }
 
+// TODO: make the sem for all the item and lock all the modifying time
+void bt_mesh_net_hbh_set_iack(struct net_buf *buf) {}
+/*
+void bt_mesh_net_hbh_set_iack(struct net_hbh_item *item) {
+	SET_ITEM_ORIENTED_IACK(item);
+}
+*/
+
 void bt_mesh_net_hbh_send(struct bt_mesh_net_tx *tx,
                           struct net_buf *buf,
                           uint32_t seq) {
     printk("New data to send\n");
+
+	/* Set as not an Oriented-iack */
+	//HARDCODED: testing purpose... need to inverse
+	buf->data[2] |= BIT(7);
+
 
     // Obviously not in the cache so no need to check
     struct net_hbh_item *item = NULL;
@@ -295,7 +312,7 @@ void bt_mesh_net_hbh_send(struct bt_mesh_net_tx *tx,
 void bt_mesh_net_hbh_recv(struct bt_mesh_net_rx *rx,
                           struct net_buf_simple *buf) {
 
-    printk("src: %#04x, dst: %#04x\n", rx->ctx.addr, rx->ctx.recv_dst);
+    printk("src: %#04x, dst: %#04x, seq %u\n", rx->ctx.addr, rx->ctx.recv_dst, rx->seq);
 
     static struct net_hbh_item recv_item;
 
@@ -334,10 +351,12 @@ void bt_mesh_net_hbh_recv(struct bt_mesh_net_rx *rx,
         return;
     }
     
-	if(!rx->iack) {
+	if(!rx->iack_bit) {
 		// message is a retransmission of the sender not marked as iack. 
 		// Need to send and Oriented-iACK
+		// (It does not receive our iack)
 		printk("(need to send iack)\n");
+		bt_mesh_net_hbh_set_iack(cached);
 		print_packet_info(cached);
 		k_work_reschedule(&cached->dwork, K_NO_WAIT);
 	}
@@ -346,7 +365,8 @@ void bt_mesh_net_hbh_recv(struct bt_mesh_net_rx *rx,
 
 
 void bt_mesh_net_hbh_init(void) {
-	printk("\n\n\nINITIALIZE HBH\n\n\n");
+	LOG_DBG("Initialize HBH");
+	
 	for(int i=0; i<ARRAY_SIZE(net_hbh_item_arr); i++) {
 		struct net_hbh_item* item = &net_hbh_item_arr[i];
 

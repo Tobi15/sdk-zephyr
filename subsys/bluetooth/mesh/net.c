@@ -751,6 +751,11 @@ void bt_mesh_net_relay(struct net_buf_simple *sbuf,
 		goto done;
 	}
 
+	if(IS_ENABLED(CONFIG_BT_MESH_HBH)) {
+		// set the iack if needed
+		bt_mesh_net_hbh_set_iack(buf);
+	}
+
 	/* When the Friend node relays message for lpn, the message will be
 	 * retransmitted using the managed flooding security credentials and
 	 * the Network PDU shall be retransmitted to all network interfaces.
@@ -868,7 +873,7 @@ void bt_mesh_net_recv(struct net_buf_simple *data, int8_t rssi,
 	}
 
 	if(IS_ENABLED(CONFIG_BT_MESH_HBH)) {
-		bt_mesh_net_hbh_iack(data);
+		bt_mesh_net_hbh_iack(&rx, data);
 	}
 
 	if (bt_mesh_net_decode(data, net_if, &rx, &buf)) {

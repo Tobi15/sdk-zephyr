@@ -263,7 +263,7 @@ struct bt_mesh_net_rx {
 	       friend_match:1; /* Matched an LPN we're friends for */
 #if defined(CONFIG_BT_MESH_HBH)
 	bt_addr_le_t bt_addr;
-	uint8_t iack:1;
+	uint8_t iack_bit:1;
 #endif
 };
 
@@ -348,6 +348,7 @@ static inline void send_cb_finalize(const struct bt_mesh_send_cb *cb,
 void bt_mesh_net_hbh_init(void);
 void bt_mesh_net_hbh_iack(struct bt_mesh_net_rx *rx,
 						  struct net_buf_simple *buf);
+void bt_mesh_net_hbh_set_iack(struct net_buf *buf);
 void bt_mesh_net_hbh_send(struct bt_mesh_net_tx *tx,
 							struct net_buf *buf,
 							uint32_t seq);

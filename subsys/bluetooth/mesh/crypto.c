@@ -327,6 +327,7 @@ int bt_mesh_net_obfuscate(uint8_t *pdu, uint32_t iv_index,
 	for (i = 0; i < 6; i++) {
 		pdu[1 + i] ^= tmp[i];
 	}
+	pdu[2] &= BIT_MASK(7); // set the MSB at 0
 
 	return 0;
 }
