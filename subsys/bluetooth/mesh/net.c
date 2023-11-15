@@ -589,9 +589,9 @@ int bt_mesh_net_send(struct bt_mesh_net_tx *tx, struct net_buf *buf,
 	}
 
 	// substract 1 to seq cause it contains the next seq number
-	if(IS_ENABLED(CONFIG_BT_MESH_HBH)) {
+#if defined(CONFIG_BT_MESH_HBH)
 		bt_mesh_net_hbh_send(tx, buf, bt_mesh.seq-1);
-	}
+#endif
 	bt_mesh_adv_send(buf, cb, cb_data);
 
 done:
@@ -653,14 +653,18 @@ static bool net_decrypt(struct bt_mesh_net_rx *rx, struct net_buf_simple *in,
 	}
 
 	if (bt_mesh_has_addr(rx->ctx.addr)) {
+#if defined(CONFIG_BT_MESH_HBH)
 		/* ack for locally originated packet */
 		bt_mesh_net_hbh_recv(rx, NULL);
+#endif
 		LOG_DBG("Dropping locally originated packet");
 		return false;
 	}
 
 	if (rx->net_if == BT_MESH_NET_IF_ADV && msg_cache_match(out)) {
+#if defined(CONFIG_BT_MESH_HBH)
 		bt_mesh_net_hbh_recv(rx, NULL);
+#endif
 		printk("Duplicate found in Network Message Cache\n");
 		return false;
 	}
@@ -764,11 +768,11 @@ static void bt_mesh_net_relay(struct net_buf_simple *sbuf,
 	}
 
 	if (relay_to_adv(rx->net_if) || rx->friend_cred) {
-		if(IS_ENABLED(CONFIG_BT_MESH_HBH)) {
+#if defined(CONFIG_BT_MESH_HBH)
 			bt_mesh_net_hbh_recv(rx, buf);
-		} else {
+#else
 			bt_mesh_adv_send(buf, NULL, NULL);
-		}
+#endif
 	}
 
 done:
@@ -856,12 +860,12 @@ void bt_mesh_net_recv(struct net_buf_simple *data, int8_t rssi,
 	NET_BUF_SIMPLE_DEFINE(buf, BT_MESH_NET_MAX_PDU_LEN);
 	struct bt_mesh_net_rx rx = { .ctx.recv_rssi = rssi };
 
-	if(IS_ENABLED(CONFIG_BT_MESH_HBH)) {
+#if defined(CONFIG_BT_MESH_HBH)
 		bt_addr_le_copy(&rx.bt_addr, addr);
 		char a[BT_ADDR_LE_STR_LEN+1] = {0};
 		bt_addr_le_to_str(&rx.bt_addr, a, sizeof(a)-1);
 		printk("receive from: %s\n", a);
-	}
+#endif
 
 	struct net_buf_simple_state state;
 	int err;
@@ -872,9 +876,9 @@ void bt_mesh_net_recv(struct net_buf_simple *data, int8_t rssi,
 		return;
 	}
 
-	if(IS_ENABLED(CONFIG_BT_MESH_HBH)) {
+#if defined(CONFIG_BT_MESH_HBH)
 		bt_mesh_net_hbh_check_iack(&rx, data);
-	}
+#endif
 
 	if (bt_mesh_net_decode(data, net_if, &rx, &buf)) {
 		return;
