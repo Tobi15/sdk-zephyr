@@ -376,7 +376,7 @@ static bool schedule_send(struct bt_mesh_ext_adv *adv)
 		 * to the previous packet than what's permitted by the specification.
 		 */
 		delta = k_uptime_delta(&timestamp);
-		k_work_reschedule(&adv->work, K_MSEC(ADV_INT_FAST_MS - delta));
+		k_work_reschedule(&adv->work, K_NO_WAIT/*K_MSEC(ADV_INT_FAST_MS - delta)*/);
 	}
 
 	return true;
