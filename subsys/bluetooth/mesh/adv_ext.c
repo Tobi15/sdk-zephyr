@@ -290,7 +290,8 @@ static void send_pending_adv(struct k_work *work)
 		 * This is essential here, as schedule_send() uses the end of the event
 		 * as a reference to avoid sending the next advertisement too soon.
 		 */
-		int64_t duration = k_uptime_delta(&adv->timestamp);
+		int64_t timestamp = adv->timestamp;
+		int64_t duration = k_uptime_delta(&timestamp);
 
 		LOG_ERR("Advertising stopped after %u ms for (%u) %s", (uint32_t)duration, adv->tag,
 		       adv_tag_to_str(adv->tag));
@@ -376,7 +377,7 @@ static bool schedule_send(struct bt_mesh_ext_adv *adv)
 		 * to the previous packet than what's permitted by the specification.
 		 */
 		delta = k_uptime_delta(&timestamp);
-		k_work_reschedule(&adv->work, K_NO_WAIT /*(ADV_INT_FAST_MS - delta)*/);
+		k_work_reschedule(&adv->work, K_MSEC(ADV_INT_FAST_MS - delta));
 	}
 
 	return true;
