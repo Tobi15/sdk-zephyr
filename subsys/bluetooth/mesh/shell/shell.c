@@ -986,32 +986,27 @@ static int cmd_comp_change(const struct shell *sh, size_t argc, char *argv[])
 #if defined(CONFIG_BT_MESH_SHELL_TEST)
 static int cmd_net_send(const struct shell *sh, size_t argc, char *argv[])
 {
-	for(int i=0; i<4; i++) {
-		NET_BUF_SIMPLE_DEFINE(msg, 32);
-
-		struct bt_mesh_msg_ctx ctx = BT_MESH_MSG_CTX_INIT(bt_mesh_shell_target_ctx.net_idx,
-								bt_mesh_shell_target_ctx.app_idx,
-								bt_mesh_shell_target_ctx.dst,
-								BT_MESH_TTL_DEFAULT);
-		struct bt_mesh_net_tx tx = {
-			.ctx = &ctx,
-			.src = bt_mesh_primary_addr(),
-		};
-
-		size_t len;
-		int err;
-
-		len = hex2bin(argv[1], strlen(argv[1]),
-				msg.data, net_buf_simple_tailroom(&msg) - 4);
-		net_buf_simple_add(&msg, len);
-
-		err = bt_mesh_trans_send(&tx, &msg, NULL, NULL);
-		if (err) {
-			shell_error(sh, "Failed to send (err %d)", err);
-		}
-	}
-
-	return 0;
+    for (int i = 0; i < 5; i++) {
+            NET_BUF_SIMPLE_DEFINE(msg, 32);
+            struct bt_mesh_msg_ctx ctx = BT_MESH_MSG_CTX_INIT(bt_mesh_shell_target_ctx.net_idx,
+                                                              bt_mesh_shell_target_ctx.app_idx,
+                                                              bt_mesh_shell_target_ctx.dst,
+                                                              BT_MESH_TTL_DEFAULT);
+            struct bt_mesh_net_tx tx = {
+                    .ctx = &ctx,
+                    .src = bt_mesh_primary_addr(),
+            };
+            size_t len;
+            int err;
+            len = hex2bin(argv[1], strlen(argv[1]),
+                          msg.data, net_buf_simple_tailroom(&msg) - 4);
+            net_buf_simple_add(&msg, len);
+            err = bt_mesh_trans_send(&tx, &msg, NULL, NULL);
+            if (err) {
+                    shell_error(sh, "Failed to send (err %d)", err);
+            }
+    }
+    return 0;
 }
 
 #if defined(CONFIG_BT_MESH_IV_UPDATE_TEST)

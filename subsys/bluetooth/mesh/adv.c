@@ -294,12 +294,6 @@ static void bt_mesh_scan_cb(const bt_addr_le_t *addr, int8_t rssi,
 
 		buf->len = len - 1;
 
-		static int64_t time = 0;
-		if(type == BT_DATA_MESH_MESSAGE && k_uptime_delta(&time) >= BT_MESH_SCAN_WINDOW_MS-2) {
-			LOG_ERR("RECV DATA");
-			time = k_uptime_get();
-		}
-		 
 		switch (type) {
 		case BT_DATA_MESH_MESSAGE:
 			bt_mesh_net_recv(buf, rssi, BT_MESH_NET_IF_ADV);
