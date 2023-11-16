@@ -25,10 +25,7 @@ else()
     zephyr_library_sources(transport_legacy.c)
 endif()
 
-if (CONFIG_BT_MESH_HBH)
-    zephyr_library_sources(net_hbh_impl.c)
-endif()
-
+zephyr_library_sources_ifdef(CONFIG_BT_MESH_HBH net_hbh_impl.c)
 
 zephyr_library_sources_ifdef(CONFIG_BT_MESH_ADV_LEGACY adv_legacy.c)
 

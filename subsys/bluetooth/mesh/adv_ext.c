@@ -416,7 +416,7 @@ void bt_mesh_adv_init(void)
 		.id = BT_ID_DEFAULT,
 		.interval_min = BT_MESH_ADV_SCAN_UNIT(ADV_INT_FAST_MS),
 		.interval_max = BT_MESH_ADV_SCAN_UNIT(ADV_INT_FAST_MS),
-#if defined(CONFIG_BT_MESH_DEBUG_USE_ID_ADDR) || defined(CONFIG_BT_MESH_HBH)
+#if defined(CONFIG_BT_MESH_DEBUG_USE_ID_ADDR) || defined(CONFIG_BT_MESH_HBH) || 1
 		.options = BT_LE_ADV_OPT_USE_IDENTITY,
 #endif
 };

@@ -508,9 +508,9 @@ int bt_mesh_start(void)
 {
 	int err;
 
-	if(IS_ENABLED(CONFIG_BT_MESH_HBH)) {
-		bt_mesh_net_hbh_init();
-	}
+#if defined(CONFIG_BT_MESH_HBH)
+	bt_mesh_net_hbh_init();
+#endif
 
 	err = bt_mesh_adv_enable();
 	if (err) {
