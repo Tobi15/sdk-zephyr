@@ -296,7 +296,7 @@ int bt_mesh_adv_gatt_send(void)
 static void bt_mesh_scan_cb(const bt_addr_le_t *addr, int8_t rssi,
 			    uint8_t adv_type, struct net_buf_simple *buf)
 {
-	if (adv_type != BT_GAP_ADV_TYPE_ADV_NONCONN_IND) {
+	if (adv_type != BT_GAP_ADV_TYPE_ADV_NONCONN_IND && adv_type != BT_GAP_ADV_TYPE_EXT_ADV) {
 		return;
 	}
 

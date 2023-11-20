@@ -219,12 +219,25 @@ static int bt_data_send(struct bt_mesh_ext_adv *adv, uint8_t num_events, uint16_
 
 	adv_interval = MAX(ADV_INT_FAST_MS, adv_interval);
 
+		// TEST TOBIAS
+	if((adv->adv_param.options & BT_LE_ADV_OPT_EXT_ADV) == 0){
+		adv->adv_param.options = adv->adv_param.options | BT_LE_ADV_OPT_EXT_ADV;
+		adv->adv_param.interval_min = BT_MESH_ADV_SCAN_UNIT(100);
+		adv->adv_param.interval_max = BT_MESH_ADV_SCAN_UNIT(100);
+
+		atomic_set_bit(adv->flags, ADV_FLAG_UPDATE_PARAMS);
+	}
+
+	LOG_DBG("bt_data_send : value option is : %x", adv->adv_param.options);
+	LOG_DBG("bt_data_send : num event is : %d", num_events);
+
+	// Commented by Tobias 
 	/* Only update advertising parameters if they're different */
-	if (adv->adv_param.interval_min != BT_MESH_ADV_SCAN_UNIT(adv_interval)) {
+	/*if (adv->adv_param.interval_min != BT_MESH_ADV_SCAN_UNIT(adv_interval)) {
 		adv->adv_param.interval_min = BT_MESH_ADV_SCAN_UNIT(adv_interval);
 		adv->adv_param.interval_max = adv->adv_param.interval_min;
 		atomic_set_bit(adv->flags, ADV_FLAG_UPDATE_PARAMS);
-	}
+	}*/
 
 	return adv_start(adv, &adv->adv_param, &start, ad, ad_len, NULL, 0);
 }
