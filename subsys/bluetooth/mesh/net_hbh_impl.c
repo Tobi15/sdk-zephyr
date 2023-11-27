@@ -154,17 +154,20 @@ static void retransmit(struct k_work *work) {
 		return;
 	}
 
+	uint8_t iack_bit = 0;
 	ITEM_LOCK(item);
 	{
+		iack_bit = item->rx.iack_bit;
 		item->transmit_number++;
-		LOG_DBG("Retransmit");
 		LOG_DBG("idx %i, buf %p", ARRAY_INDEX(net_hbh_item_arr, item), item->tx_buf);
 		bt_mesh_adv_send(item->tx_buf, NULL, NULL);
 	}
-	ITEM_UNLOCK(item);;
+	ITEM_UNLOCK(item);
 	
-	if(bt_mesh_has_addr(item->rx.ctx.recv_dst)) {
-		/* If it is the last node, he will never receive an ACK */
+	if(bt_mesh_has_addr(item->rx.ctx.recv_dst) || iack_bit) {
+		/* If it is the last node, he will never receive an ACK.
+		 * he will never receive an ACK when the message is an Oriented-iACK message.
+		 */
 		k_work_reschedule(dwork, K_MSEC(item_get_remaining_time_msec(item)));
 	} else {
 		k_work_reschedule(dwork, K_SECONDS(BT_MESH_NET_HBH_RTO_SECS));
@@ -241,9 +244,9 @@ static void print_packet_info(struct net_hbh_item *item) {
 	printk("packet_info:\n\
 \taddr: %s\n\
 \tmesh_src: %#04x, mesh_dst: %#04x\n\
-\tseq: %i\n\
+\tseq: %i (iack=%i)\n\
 ",
-	src, item->rx.ctx.addr, item->rx.ctx.recv_dst, item->rx.seq);
+	src, item->rx.ctx.addr, item->rx.ctx.recv_dst, item->rx.seq, item->rx.iack_bit);
 }
 
 void bt_mesh_net_hbh_check_iack(struct bt_mesh_net_rx *rx,
@@ -252,7 +255,7 @@ void bt_mesh_net_hbh_check_iack(struct bt_mesh_net_rx *rx,
 	rx->iack_bit = (SEQ(buf->data) & BIT(23))>0;
 	
 	if(rx->iack_bit) {
-		LOG_DBG("IACK BIT SET\n");
+		LOG_DBG("IACK BIT SET");
 		buf->data[2] &= ~BIT(7);
 	}
 	
@@ -264,6 +267,7 @@ static void bt_mesh_net_hbh_set_iack(struct net_hbh_item *item) {
 	{
 		/* Byte 2 contains MSB of SEQ number */
 		item->tx_buf->data[2] |= BIT(7);
+		item->rx.iack_bit = 1;
 	}
 	ITEM_UNLOCK(item);
 }
@@ -293,6 +297,7 @@ void bt_mesh_net_hbh_send(struct bt_mesh_net_tx *tx,
 		.ctx.addr = tx->src,
 		.ctx.recv_dst = tx->ctx->addr,
 		.seq = seq,
+		.iack_bit = 0,
 	};
 	bt_mesh_net_hbh_copy_addr(&rx);
 	
