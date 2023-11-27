@@ -337,7 +337,7 @@ void bt_mesh_net_hbh_recv(struct bt_mesh_net_rx *rx,
 	}
 
 	/* 
-	 * Data is cached so it's an maybe an iack.
+	 * Data is cached so it's maybe an iack.
 	 * It's not an iack if the bt_addr_le is the same as first received.
 	 */
 	if(bt_mesh_net_hbh_is_iack(rx, cached)) {
