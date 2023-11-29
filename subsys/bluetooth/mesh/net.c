@@ -665,7 +665,7 @@ static bool net_decrypt(struct bt_mesh_net_rx *rx, struct net_buf_simple *in,
 #if defined(CONFIG_BT_MESH_HBH)
 		bt_mesh_net_hbh_recv(rx, NULL);
 #endif
-		printk("Duplicate found in Network Message Cache\n");
+		LOG_DBG("Duplicate found in Network Message Cache\n");
 		return false;
 	}
 
@@ -864,7 +864,7 @@ void bt_mesh_net_recv(struct net_buf_simple *data, int8_t rssi,
 		bt_addr_le_copy(&rx.bt_addr, addr);
 		char a[BT_ADDR_LE_STR_LEN+1] = {0};
 		bt_addr_le_to_str(&rx.bt_addr, a, sizeof(a)-1);
-		printk("receive from: %s\n", a);
+		LOG_DBG("receive from: %s", a);
 #endif
 
 	struct net_buf_simple_state state;

@@ -56,7 +56,7 @@ LOG_MODULE_REGISTER(bt_mesh_net_hbh_impl);
 #define BT_MESH_NET_HBH_MAX_HOP_DELAY_MSEC 60
 #define BT_MESH_NET_HBH_MSG_CACHE_TIMEOUT_MSEC ((BT_MESH_NET_HBH_RTO_SECS*MSEC_PER_SEC*\
 												BT_MESH_NET_HBH_MAX_RETRANSMISSION)*2\
-												+ BT_MESH_NET_HBH_MAX_HOP_DELAY_MSEC)
+												+ BT_MESH_NET_HBH_MAX_HOP_DELAY_MSEC*2)
 
 struct net_hbh_item {
 	struct bt_mesh_net_rx rx;
@@ -110,11 +110,6 @@ static inline int64_t item_get_remaining_time_msec(struct net_hbh_item *item) {
 
 
 
-
-
-
-
-
 static void bt_mesh_net_hbh_free_item(struct net_hbh_item *item) {
 	LOG_DBG("Free item (tx_buf: %p)\n", item->tx_buf);
 	ITEM_LOCK(item);
@@ -150,25 +145,25 @@ static void retransmit(struct k_work *work) {
 	}
 
 	if(item->transmit_number == BT_MESH_NET_HBH_MAX_RETRANSMISSION) {
-		k_work_reschedule(dwork, K_MSEC(item_get_remaining_time_msec(item)));
+		k_work_reschedule(dwork, K_MSEC(item_get_remaining_time_msec(item)+1));
 		return;
 	}
 
-	uint8_t iack_bit = 0;
+	bool acked = false;
 	ITEM_LOCK(item);
 	{
-		iack_bit = item->rx.iack_bit;
+		acked = item->acked;
 		item->transmit_number++;
 		LOG_DBG("idx %i, buf %p", ARRAY_INDEX(net_hbh_item_arr, item), item->tx_buf);
 		bt_mesh_adv_send(item->tx_buf, NULL, NULL);
 	}
 	ITEM_UNLOCK(item);
 	
-	if(bt_mesh_has_addr(item->rx.ctx.recv_dst) || iack_bit) {
-		/* If it is the last node, he will never receive an ACK.
-		 * he will never receive an ACK when the message is an Oriented-iACK message.
+	if(acked) {
+		/* He will never receive an ACK when the message is acked. This
+		 * is an Oriented-iACK message or the last node.
 		 */
-		k_work_reschedule(dwork, K_MSEC(item_get_remaining_time_msec(item)));
+		k_work_reschedule(dwork, K_MSEC(item_get_remaining_time_msec(item)+1));
 	} else {
 		k_work_reschedule(dwork, K_SECONDS(BT_MESH_NET_HBH_RTO_SECS));
 	}
@@ -225,9 +220,16 @@ static void bt_mesh_net_hbh_create_item(struct net_hbh_item **item,
 			LOG_ERR("buf is null");
 			while(true);
 		}
+
+		if(bt_mesh_has_addr(init_item->rx.ctx.recv_dst)) {
+			/* This is the destination. He will never receive an ack */
+			init_item->acked = true;
+		} else {
+			init_item->acked = false;
+		}
 		
 		init_item->tx_buf = net_buf_ref(buf);
-		init_item->acked = false;
+
 		init_item->transmit_number = 0;
 
 		item_set_timestamp(init_item, k_uptime_get());
@@ -238,6 +240,7 @@ static void bt_mesh_net_hbh_create_item(struct net_hbh_item **item,
 
 
 static void print_packet_info(struct net_hbh_item *item) {
+	return;
 	char src[BT_ADDR_LE_STR_LEN+1] = {0};
 	bt_addr_le_to_str(&item->rx.bt_addr, src, sizeof(src)-1);
 	
@@ -267,7 +270,6 @@ static void bt_mesh_net_hbh_set_iack(struct net_hbh_item *item) {
 	{
 		/* Byte 2 contains MSB of SEQ number */
 		item->tx_buf->data[2] |= BIT(7);
-		item->rx.iack_bit = 1;
 	}
 	ITEM_UNLOCK(item);
 }
@@ -338,7 +340,7 @@ void bt_mesh_net_hbh_recv(struct bt_mesh_net_rx *rx,
 
 	/* 
 	 * Data is cached so it's maybe an iack.
-	 * It's not an iack if the bt_addr_le is the same as first received.
+	 * It's not an iack if the bt_addr_le is the same as first received (Ni+1).
 	 */
 	if(bt_mesh_net_hbh_is_iack(rx, cached)) {
 
@@ -359,13 +361,18 @@ void bt_mesh_net_hbh_recv(struct bt_mesh_net_rx *rx,
 		return;
 	}
 
-	
+	/* Message form the sender (Ni-1) */	
 	if(!rx->iack_bit) {
 		/* Message is a retransmission of the sender not marked as iack. 
-	 	 * Need to send and Oriented-iACK (It does not receive our iack).
+	 	 * Need to send an iACK.
 	 	 */
 		LOG_DBG("(need to send iack)\n");
-		bt_mesh_net_hbh_set_iack(cached);
+		if(cached->acked) {
+			/* Need to send an Oriented-iACK as the message is already
+			 * acked by Ni+1 but Ni-1 not received the message
+			 */
+			bt_mesh_net_hbh_set_iack(cached);
+		}
 		print_packet_info(cached);
 		k_work_reschedule(&cached->dwork, K_NO_WAIT);
 	}
