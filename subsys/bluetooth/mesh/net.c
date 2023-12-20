@@ -173,6 +173,7 @@ static bool msg_cache_match(struct net_buf_simple *pdu)
 
 static void msg_cache_add(struct bt_mesh_net_rx *rx)
 {
+	LOG_DBG("src: %x, seq: %i", rx->ctx.addr, rx->seq);
 	msg_cache_next %= ARRAY_SIZE(msg_cache);
 	msg_cache[msg_cache_next].src = rx->ctx.addr;
 	msg_cache[msg_cache_next].seq = rx->seq;
@@ -655,6 +656,7 @@ static bool net_decrypt(struct bt_mesh_net_rx *rx, struct net_buf_simple *in,
 	if (bt_mesh_has_addr(rx->ctx.addr)) {
 #if defined(CONFIG_BT_MESH_HBH)
 		/* ack for locally originated packet */
+		LOG_DBG("Ack for locally originated packet");
 		bt_mesh_net_hbh_recv(rx, NULL);
 #endif
 		LOG_DBG("Dropping locally originated packet");
@@ -663,9 +665,11 @@ static bool net_decrypt(struct bt_mesh_net_rx *rx, struct net_buf_simple *in,
 
 	if (rx->net_if == BT_MESH_NET_IF_ADV && msg_cache_match(out)) {
 #if defined(CONFIG_BT_MESH_HBH)
+		/* ack or retransmission */
+		LOG_DBG("ack or retransmission");
 		bt_mesh_net_hbh_recv(rx, NULL);
 #endif
-		LOG_DBG("Duplicate found in Network Message Cache\n");
+		LOG_DBG("Duplicate found in Network Message Cache");
 		return false;
 	}
 
@@ -727,7 +731,7 @@ static void bt_mesh_net_relay(struct net_buf_simple *sbuf,
 	buf = bt_mesh_adv_create(BT_MESH_ADV_DATA, BT_MESH_RELAY_ADV,
 				 transmit, K_NO_WAIT);
 	if (!buf) {
-		LOG_DBG("Out of relay buffers");
+		LOG_ERR("Out of relay buffers");
 		return;
 	}
 
@@ -739,7 +743,7 @@ static void bt_mesh_net_relay(struct net_buf_simple *sbuf,
 
 	cred = &rx->sub->keys[SUBNET_KEY_TX_IDX(rx->sub)].msg;
 
-	LOG_DBG("Relaying packet. TTL is now %u\n", TTL(buf->data));
+	LOG_DBG("Relaying packet. TTL is now %u", TTL(buf->data));
 
 	/* Update NID if RX or RX was with friend credentials */
 	if (rx->friend_cred) {
@@ -884,8 +888,25 @@ void bt_mesh_net_recv(struct net_buf_simple *data, int8_t rssi,
 		return;
 	}
 
+	if(BT_MESH_ADDR_IS_UNICAST(rx.ctx.recv_dst) &&
+		rx.ctx.addr > bt_mesh_primary_addr() && rx.ctx.addr != 0x566a) {
+		LOG_ERR("Drop message 1 (primary: %x, src: %x, dst: %x)", bt_mesh_primary_addr(), rx.ctx.addr, rx.ctx.recv_dst);
+		return;
+	}
+
+	if(BT_MESH_ADDR_IS_UNICAST(rx.ctx.recv_dst) &&
+		rx.ctx.addr == 0x566a && rx.ctx.recv_dst > bt_mesh_primary_addr()) {
+		LOG_ERR("Drop message 2 (primary: %x, src: %x, dst: %x)", bt_mesh_primary_addr(), rx.ctx.addr, rx.ctx.recv_dst);
+		return;
+	}
+
 	/* Save the state so the buffer can later be relayed */
 	net_buf_simple_save(&buf, &state);
+
+#if defined(CONFIG_BT_MESH_HBH)
+	bt_mesh_net_relay(&buf, &rx);
+	k_sleep(K_MSEC(5));
+#endif
 
 	rx.local_match = (bt_mesh_fixed_group_match(rx.ctx.recv_dst) ||
 			  bt_mesh_has_addr(rx.ctx.recv_dst));
@@ -925,9 +946,9 @@ void bt_mesh_net_recv(struct net_buf_simple *data, int8_t rssi,
 	/* Relay if this was a group/virtual address, or if the destination
 	 * was neither a local element nor an LPN we're Friends for.
 	 */
-	if (IS_ENABLED(CONFIG_BT_MESH_HBH) ||
-		!BT_MESH_ADDR_IS_UNICAST(rx.ctx.recv_dst) ||
-			(!rx.local_match && !rx.friend_match)) {
+	if (!IS_ENABLED(CONFIG_BT_MESH_HBH) &&
+		(!BT_MESH_ADDR_IS_UNICAST(rx.ctx.recv_dst) ||
+			(!rx.local_match && !rx.friend_match))) {
 		net_buf_simple_restore(&buf, &state);
 		bt_mesh_net_relay(&buf, &rx);
 	}
