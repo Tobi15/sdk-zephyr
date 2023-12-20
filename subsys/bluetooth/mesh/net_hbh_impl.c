@@ -51,11 +51,11 @@ LOG_MODULE_REGISTER(bt_mesh_net_hbh_impl);
 
 #define SEQ(pdu) (sys_get_be24(&pdu[2]))
 
-#define BT_MESH_NET_HBH_RTO_SECS 2
-#define BT_MESH_NET_HBH_MAX_RETRANSMISSION 10
+#define BT_MESH_NET_HBH_RTO_MSEC (300+(2-1)*50)
+static uint8_t bt_mesh_net_hbh_retransmission = 10;
 #define BT_MESH_NET_HBH_MAX_HOP_DELAY_MSEC 60
-#define BT_MESH_NET_HBH_MSG_CACHE_TIMEOUT_MSEC ((BT_MESH_NET_HBH_RTO_SECS*MSEC_PER_SEC*\
-												BT_MESH_NET_HBH_MAX_RETRANSMISSION)*2\
+#define BT_MESH_NET_HBH_MSG_CACHE_TIMEOUT_MSEC ((BT_MESH_NET_HBH_RTO_MSEC*\
+												((int64_t)bt_mesh_net_hbh_retransmission))*2\
 												+ BT_MESH_NET_HBH_MAX_HOP_DELAY_MSEC*2)
 
 struct net_hbh_item {
@@ -70,11 +70,15 @@ struct net_hbh_item {
 	struct k_mutex item_mut;
 	struct k_work_delayable dwork;
 };
-static struct net_hbh_item net_hbh_item_arr[10];
+static struct net_hbh_item net_hbh_item_arr[100];
+atomic_t bt_mesh_net_hbh_number_of_transmission = ATOMIC_INIT(0);
+
+
 #define ITEM_FREE (true)
 #define ITEM_USED (false)
 #define ITEM_LOCK(x) (k_mutex_lock(&x->item_mut, K_FOREVER))
 #define ITEM_UNLOCK(x) (k_mutex_unlock(&x->item_mut))
+
 static inline int64_t item_get_timestamp(struct net_hbh_item *item) {
 	int64_t res;
 	k_mutex_lock(&item->item_mut, K_FOREVER);
@@ -82,15 +86,18 @@ static inline int64_t item_get_timestamp(struct net_hbh_item *item) {
 	k_mutex_unlock(&item->item_mut);
 	return res;
 }
+
 static inline void item_set_timestamp(struct net_hbh_item *item, int64_t val) {
 	k_mutex_lock(&item->item_mut, K_FOREVER);
 	item->recv_timestamp = val;
 	k_mutex_unlock(&item->item_mut);
 }
+
 static inline int64_t item_get_timestamp_delta(struct net_hbh_item *item) {
 	int64_t ref = item_get_timestamp(item);
 	return k_uptime_delta(&ref);
 }
+
 static inline bool item_is_item_free(struct net_hbh_item *item) {
 	bool res;
 	k_mutex_lock(&item->item_mut, K_FOREVER);
@@ -98,6 +105,7 @@ static inline bool item_is_item_free(struct net_hbh_item *item) {
 	k_mutex_unlock(&item->item_mut);
 	return res;
 }
+
 static inline void item_set_item_free(struct net_hbh_item *item, bool val) {
 	k_mutex_lock(&item->item_mut, K_FOREVER);
 	item->item_free = val & 0x1; /* one bit field */
@@ -105,13 +113,29 @@ static inline void item_set_item_free(struct net_hbh_item *item, bool val) {
 }
 static inline int64_t item_get_remaining_time_msec(struct net_hbh_item *item) {
 	/* +1 to avoid timing race */
-	return BT_MESH_NET_HBH_MSG_CACHE_TIMEOUT_MSEC-(k_uptime_get()-item_get_timestamp(item))+1;
+	return BT_MESH_NET_HBH_MSG_CACHE_TIMEOUT_MSEC-item_get_timestamp_delta(item)+1;
+}
+
+static void print_packet_info(struct net_hbh_item *item) {
+	char src[BT_ADDR_LE_STR_LEN+1] = {0};
+	bt_addr_le_to_str(&item->rx.bt_addr, src, sizeof(src)-1);
+	
+	LOG_DBG("packet_info:\n\
+\taddr: %s\n\
+\tmesh_src: %#04x, mesh_dst: %#04x\n\
+\tseq: %i (iack=%i)\
+",
+	src, item->rx.ctx.addr, item->rx.ctx.recv_dst, item->rx.seq, item->rx.iack_bit);
 }
 
 
-
 static void bt_mesh_net_hbh_free_item(struct net_hbh_item *item) {
-	LOG_DBG("Free item (tx_buf: %p)\n", item->tx_buf);
+	LOG_DBG("Free item (tx_buf: %p, src: %x, seq: %i, remaining: %lli, after: %lli",
+		item->tx_buf,
+		item->rx.ctx.addr,
+		item->rx.seq,
+		item_get_remaining_time_msec(item), item_get_timestamp_delta(item));
+
 	ITEM_LOCK(item);
 	{
 		net_buf_unref(item->tx_buf);
@@ -139,13 +163,14 @@ static void retransmit(struct k_work *work) {
 	struct net_hbh_item *item = CONTAINER_OF(dwork, struct net_hbh_item, dwork);
 	
 	if(item_get_timestamp_delta(item) >= BT_MESH_NET_HBH_MSG_CACHE_TIMEOUT_MSEC) {
+		LOG_DBG("delta: %lli, timeout: %lli", item_get_timestamp_delta(item), BT_MESH_NET_HBH_MSG_CACHE_TIMEOUT_MSEC);
 		/* Free the msg as he exceded the life time */
 		bt_mesh_net_hbh_free_item(item);
 		return;
 	}
 
-	if(item->transmit_number == BT_MESH_NET_HBH_MAX_RETRANSMISSION) {
-		k_work_reschedule(dwork, K_MSEC(item_get_remaining_time_msec(item)+1));
+	if(item->transmit_number >= bt_mesh_net_hbh_retransmission) {
+		k_work_reschedule(dwork, K_MSEC(item_get_remaining_time_msec(item)));
 		return;
 	}
 
@@ -154,6 +179,7 @@ static void retransmit(struct k_work *work) {
 	{
 		acked = item->acked;
 		item->transmit_number++;
+		atomic_inc(&bt_mesh_net_hbh_number_of_transmission);
 		LOG_DBG("idx %i, buf %p", ARRAY_INDEX(net_hbh_item_arr, item), item->tx_buf);
 		bt_mesh_adv_send(item->tx_buf, NULL, NULL);
 	}
@@ -163,9 +189,9 @@ static void retransmit(struct k_work *work) {
 		/* He will never receive an ACK when the message is acked. This
 		 * is an Oriented-iACK message or the last node.
 		 */
-		k_work_reschedule(dwork, K_MSEC(item_get_remaining_time_msec(item)+1));
+		k_work_reschedule(dwork, K_MSEC(item_get_remaining_time_msec(item)));
 	} else {
-		k_work_reschedule(dwork, K_SECONDS(BT_MESH_NET_HBH_RTO_SECS));
+		k_work_reschedule(dwork, K_MSEC(BT_MESH_NET_HBH_RTO_MSEC));
 	}
 }
 
@@ -206,7 +232,7 @@ static void bt_mesh_net_hbh_create_item(struct net_hbh_item **item,
 	
 	bt_mesh_net_hbh_get_free_item(item);
 	if(*item == NULL) {
-		LOG_ERR("No more space to stock advertising...\n");
+		LOG_ERR("No more space to stock advertising");
 		return;
 	}
 
@@ -217,12 +243,13 @@ static void bt_mesh_net_hbh_create_item(struct net_hbh_item **item,
 		memcpy(&init_item->rx, rx, sizeof(struct bt_mesh_net_rx));
 
 		if(buf == NULL) {
-			LOG_ERR("buf is null");
+			print_packet_info(init_item);
+			printk("buf is null\n");
 			while(true);
 		}
 
 		if(bt_mesh_has_addr(init_item->rx.ctx.recv_dst)) {
-			/* This is the destination. He will never receive an ack */
+			/* This is the destination. It will never receive an ack */
 			init_item->acked = true;
 		} else {
 			init_item->acked = false;
@@ -238,19 +265,6 @@ static void bt_mesh_net_hbh_create_item(struct net_hbh_item **item,
 	ITEM_UNLOCK(init_item);
 }
 
-
-static void print_packet_info(struct net_hbh_item *item) {
-	return;
-	char src[BT_ADDR_LE_STR_LEN+1] = {0};
-	bt_addr_le_to_str(&item->rx.bt_addr, src, sizeof(src)-1);
-	
-	printk("packet_info:\n\
-\taddr: %s\n\
-\tmesh_src: %#04x, mesh_dst: %#04x\n\
-\tseq: %i (iack=%i)\n\
-",
-	src, item->rx.ctx.addr, item->rx.ctx.recv_dst, item->rx.seq, item->rx.iack_bit);
-}
 
 void bt_mesh_net_hbh_check_iack(struct bt_mesh_net_rx *rx,
 						  struct net_buf_simple *buf) {
@@ -310,20 +324,21 @@ void bt_mesh_net_hbh_send(struct bt_mesh_net_tx *tx,
 	{
 		/* already send by the BT TX thread the first time */
 		item->transmit_number++;
+		atomic_inc(&bt_mesh_net_hbh_number_of_transmission);
 	}
 	ITEM_UNLOCK(item);
 
 	print_packet_info(item);
 
 	/* Schedule next send */
-	k_work_reschedule(&item->dwork, K_SECONDS(BT_MESH_NET_HBH_RTO_SECS));
+	k_work_reschedule(&item->dwork, K_MSEC(BT_MESH_NET_HBH_RTO_MSEC));
 }
 
 
 void bt_mesh_net_hbh_recv(struct bt_mesh_net_rx *rx,
 						  struct net_buf *buf) {
 
-	LOG_DBG("src: %#04x, dst: %#04x, seq %u\n", rx->ctx.addr, rx->ctx.recv_dst, rx->seq);
+	LOG_DBG("src: %#04x, dst: %#04x, seq %u", rx->ctx.addr, rx->ctx.recv_dst, rx->seq);
 
 	struct net_hbh_item *cached = NULL;
 	bt_mesh_net_hbh_is_msg_cached(rx, &cached);
@@ -331,21 +346,20 @@ void bt_mesh_net_hbh_recv(struct bt_mesh_net_rx *rx,
 	if(cached == NULL) {
 		/* Message not yet cached. So it's a new message that need to be relayed */
 		bt_mesh_net_hbh_create_item(&cached, rx, buf);
-		LOG_DBG("(new message)\n");
+		LOG_DBG("(new message)");
 		print_packet_info(cached);
 		k_work_reschedule(&cached->dwork, K_NO_WAIT);
 
 		return;
 	}
 
-	/* 
-	 * Data is cached so it's maybe an iack.
+	/* Data is cached so it's maybe an iack.
 	 * It's not an iack if the bt_addr_le is the same as first received (Ni+1).
 	 */
 	if(bt_mesh_net_hbh_is_iack(rx, cached)) {
 
 		if(cached->acked) {
-			/* Possible if a ack is already received.
+			/* Possible if an ack is already received.
 			 * It's just a retransmission of node n+1.
 			 */
 			return;
@@ -353,7 +367,7 @@ void bt_mesh_net_hbh_recv(struct bt_mesh_net_rx *rx,
 		
 		cached->acked = true;
 		
-		LOG_DBG("(set message acked)\n");
+		LOG_DBG("(set message acked)");
 		print_packet_info(cached);
 		
 		int64_t remaining = item_get_remaining_time_msec(cached);
@@ -361,12 +375,12 @@ void bt_mesh_net_hbh_recv(struct bt_mesh_net_rx *rx,
 		return;
 	}
 
-	/* Message form the sender (Ni-1) */	
+	/* Message from the sender (Ni-1) */	
 	if(!rx->iack_bit) {
 		/* Message is a retransmission of the sender not marked as iack. 
-	 	 * Need to send an iACK.
+	 	 * Need to send an ACK.
 	 	 */
-		LOG_DBG("(need to send iack)\n");
+		LOG_DBG("(need to send iack)");
 		if(cached->acked) {
 			/* Need to send an Oriented-iACK as the message is already
 			 * acked by Ni+1 but Ni-1 not received the message
@@ -376,6 +390,10 @@ void bt_mesh_net_hbh_recv(struct bt_mesh_net_rx *rx,
 		print_packet_info(cached);
 		k_work_reschedule(&cached->dwork, K_NO_WAIT);
 	}
+
+	/* Message from the sender (Ni-1) marked as Oriented-iACK.
+	 * No need to do anything
+	 */
 }
 
 
@@ -397,3 +415,6 @@ void bt_mesh_net_hbh_init(void) {
 	}
 }
 
+void bt_mesh_net_hbh_set_max_retransmission(uint8_t retransmission) {
+	bt_mesh_net_hbh_retransmission = retransmission;
+}
