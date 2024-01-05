@@ -591,7 +591,7 @@ int bt_mesh_net_send(struct bt_mesh_net_tx *tx, struct net_buf *buf,
 
 	// substract 1 to seq cause it contains the next seq number
 #if defined(CONFIG_BT_MESH_HBH)
-		bt_mesh_net_hbh_send(tx, buf, bt_mesh.seq-1);
+	bt_mesh_net_hbh_send(tx, buf, bt_mesh.seq-1);
 #endif
 	bt_mesh_adv_send(buf, cb, cb_data);
 
@@ -667,7 +667,9 @@ static bool net_decrypt(struct bt_mesh_net_rx *rx, struct net_buf_simple *in,
 #if defined(CONFIG_BT_MESH_HBH)
 		/* ack or retransmission */
 		LOG_DBG("ack or retransmission");
-		bt_mesh_net_hbh_recv(rx, NULL);
+		if(rx->ctx.addr <= bt_mesh_primary_addr() || rx->ctx.addr == 0x566a) {
+			bt_mesh_net_hbh_recv(rx, NULL);
+		}
 #endif
 		LOG_DBG("Duplicate found in Network Message Cache");
 		return false;
@@ -890,15 +892,16 @@ void bt_mesh_net_recv(struct net_buf_simple *data, int8_t rssi,
 
 	if(BT_MESH_ADDR_IS_UNICAST(rx.ctx.recv_dst) &&
 		rx.ctx.addr > bt_mesh_primary_addr() && rx.ctx.addr != 0x566a) {
-		LOG_ERR("Drop message 1 (primary: %x, src: %x, dst: %x)", bt_mesh_primary_addr(), rx.ctx.addr, rx.ctx.recv_dst);
+		LOG_DBG("Drop message 1 (primary: %x, src: %x, dst: %x)", bt_mesh_primary_addr(), rx.ctx.addr, rx.ctx.recv_dst);
 		return;
 	}
-
+#if defined(CONFIG_BT_MESH_HBH)
 	if(BT_MESH_ADDR_IS_UNICAST(rx.ctx.recv_dst) &&
 		rx.ctx.addr == 0x566a && rx.ctx.recv_dst > bt_mesh_primary_addr()) {
-		LOG_ERR("Drop message 2 (primary: %x, src: %x, dst: %x)", bt_mesh_primary_addr(), rx.ctx.addr, rx.ctx.recv_dst);
+		LOG_DBG("Drop message 2 (primary: %x, src: %x, dst: %x)", bt_mesh_primary_addr(), rx.ctx.addr, rx.ctx.recv_dst);
 		return;
 	}
+#endif
 
 	/* Save the state so the buffer can later be relayed */
 	net_buf_simple_save(&buf, &state);

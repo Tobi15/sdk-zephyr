@@ -70,7 +70,7 @@ struct net_hbh_item {
 	struct k_mutex item_mut;
 	struct k_work_delayable dwork;
 };
-static struct net_hbh_item net_hbh_item_arr[100];
+static struct net_hbh_item net_hbh_item_arr[CONFIG_BT_MESH_ADV_BUF_COUNT + CONFIG_BT_MESH_RELAY_BUF_COUNT];
 atomic_t bt_mesh_net_hbh_number_of_transmission = ATOMIC_INIT(0);
 
 
@@ -138,7 +138,7 @@ static void bt_mesh_net_hbh_free_item(struct net_hbh_item *item) {
 
 	ITEM_LOCK(item);
 	{
-		net_buf_unref(item->tx_buf);
+		if(item->tx_buf->ref > 0) net_buf_unref(item->tx_buf);
 		item_set_item_free(item, ITEM_FREE);
 	}
 	ITEM_UNLOCK(item);
@@ -157,6 +157,20 @@ static void bt_mesh_net_hbh_get_free_item(struct net_hbh_item* *item) {
 
 	*item = NULL;
 }
+
+static void callback(int err, void* cb_data) {
+	struct net_hbh_item *item = (struct net_hbh_item*)cb_data;
+	ITEM_LOCK(item);
+	{
+		LOG_DBG("err %i", err);
+	}
+	ITEM_UNLOCK(item);
+}
+
+static const struct bt_mesh_send_cb cb = {
+	.start = NULL,
+	.end = callback,
+};
 
 static void retransmit(struct k_work *work) {
 	struct k_work_delayable *dwork = k_work_delayable_from_work(work);
@@ -181,13 +195,23 @@ static void retransmit(struct k_work *work) {
 		item->transmit_number++;
 		atomic_inc(&bt_mesh_net_hbh_number_of_transmission);
 		LOG_DBG("idx %i, buf %p", ARRAY_INDEX(net_hbh_item_arr, item), item->tx_buf);
-		bt_mesh_adv_send(item->tx_buf, NULL, NULL);
+		if(item->tx_buf->data == NULL || item->tx_buf->ref == 0) {
+			LOG_ERR("data is null");
+			print_packet_info(item);
+			k_work_cancel_delayable(&item->dwork);
+			bt_mesh_net_hbh_free_item(item);
+		} else {
+			if(BT_MESH_ADV(item->tx_buf)->busy) {
+				LOG_ERR("BUSY");
+				while(true);
+			}
+			bt_mesh_adv_send(item->tx_buf, &cb, (void*)item);
+		}
 	}
 	ITEM_UNLOCK(item);
 	
 	if(acked) {
-		/* He will never receive an ACK when the message is acked. This
-		 * is an Oriented-iACK message or the last node.
+		/* He will never receive an ACK when the message is acked.
 		 */
 		k_work_reschedule(dwork, K_MSEC(item_get_remaining_time_msec(item)));
 	} else {
@@ -231,10 +255,7 @@ static void bt_mesh_net_hbh_create_item(struct net_hbh_item **item,
 								 struct net_buf *buf) {
 	
 	bt_mesh_net_hbh_get_free_item(item);
-	if(*item == NULL) {
-		LOG_ERR("No more space to stock advertising");
-		return;
-	}
+	if(*item == NULL) return;
 
 	struct net_hbh_item *init_item = *item;
 
@@ -244,7 +265,7 @@ static void bt_mesh_net_hbh_create_item(struct net_hbh_item **item,
 
 		if(buf == NULL) {
 			print_packet_info(init_item);
-			printk("buf is null\n");
+			LOG_ERR("ADV buf is NULL");
 			while(true);
 		}
 
@@ -319,6 +340,10 @@ void bt_mesh_net_hbh_send(struct bt_mesh_net_tx *tx,
 	
 	struct net_hbh_item *item = NULL;
 	bt_mesh_net_hbh_create_item(&item, &rx, buf);
+	if(item == NULL) {
+		LOG_ERR("No more space to stock advertising");
+		return;
+	}
 	
 	ITEM_LOCK(item);
 	{
@@ -343,15 +368,36 @@ void bt_mesh_net_hbh_recv(struct bt_mesh_net_rx *rx,
 	struct net_hbh_item *cached = NULL;
 	bt_mesh_net_hbh_is_msg_cached(rx, &cached);
 	
-	if(cached == NULL) {
+	if(cached == NULL && buf != NULL) {
 		/* Message not yet cached. So it's a new message that need to be relayed */
 		bt_mesh_net_hbh_create_item(&cached, rx, buf);
+		if(cached == NULL) {
+			LOG_ERR("No more space to stock advertising");
+			return;
+		}
 		LOG_DBG("(new message)");
 		print_packet_info(cached);
 		k_work_reschedule(&cached->dwork, K_NO_WAIT);
 
 		return;
 	}
+
+	if(cached == NULL && buf == NULL) {
+		/**
+		 * This case happen when this is a retransmission of the a node.
+		 * The message is thus already in the bt_mesh_net::cache and the destination
+		 * address is not decrypted. Need to rely on the protocol and simply drop
+		 * the packet. 
+		 */
+		LOG_DBG("Drop HBH message special case");
+		return;
+	}
+
+	if(cached->tx_buf->data == NULL) {
+		LOG_ERR("data is NULL");
+		return;
+	}
+
 
 	/* Data is cached so it's maybe an iack.
 	 * It's not an iack if the bt_addr_le is the same as first received (Ni+1).
