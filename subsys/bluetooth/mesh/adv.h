@@ -38,9 +38,8 @@ struct bt_mesh_adv {
 
 	uint8_t      type:2,
 		  started:1,
-		  busy:1,
 		  tag:4;
-
+	atomic_t      busy;
 	uint8_t      xmit;
 };
 

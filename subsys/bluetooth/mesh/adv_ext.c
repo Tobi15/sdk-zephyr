@@ -307,12 +307,13 @@ static void send_pending_adv(struct k_work *work)
 
 	while ((buf = bt_mesh_adv_buf_get_by_tag(adv->tag, K_NO_WAIT))) {
 		/* busy == 0 means this was canceled */
-		if (!BT_MESH_ADV(buf)->busy) {
+		if (!atomic_get(&BT_MESH_ADV(buf)->busy)) {
+			LOG_ERR("CANCELLED %p", buf);
 			net_buf_unref(buf);
 			continue;
 		}
 
-		BT_MESH_ADV(buf)->busy = 0U;
+		atomic_dec(&BT_MESH_ADV(buf)->busy);
 		err = buf_send(adv, buf);
 
 		net_buf_unref(buf);

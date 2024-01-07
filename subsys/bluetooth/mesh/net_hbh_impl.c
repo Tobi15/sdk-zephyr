@@ -197,13 +197,15 @@ static void retransmit(struct k_work *work) {
 		LOG_DBG("idx %i, buf %p", ARRAY_INDEX(net_hbh_item_arr, item), item->tx_buf);
 		if(item->tx_buf->data == NULL || item->tx_buf->ref == 0) {
 			LOG_ERR("data is null");
+			while(true);
 			print_packet_info(item);
 			k_work_cancel_delayable(&item->dwork);
 			bt_mesh_net_hbh_free_item(item);
 		} else {
-			if(BT_MESH_ADV(item->tx_buf)->busy) {
-				LOG_ERR("BUSY");
-				while(true);
+			if(atomic_get(&BT_MESH_ADV(item->tx_buf)->busy)) {
+				k_work_reschedule(dwork, K_MSEC(BT_MESH_NET_HBH_RTO_MSEC));
+				ITEM_UNLOCK(item);
+				return;
 			}
 			bt_mesh_adv_send(item->tx_buf, &cb, (void*)item);
 		}
@@ -255,6 +257,8 @@ static void bt_mesh_net_hbh_create_item(struct net_hbh_item **item,
 								 struct net_buf *buf) {
 	
 	bt_mesh_net_hbh_get_free_item(item);
+
+	/* No more space */
 	if(*item == NULL) return;
 
 	struct net_hbh_item *init_item = *item;
@@ -392,9 +396,9 @@ void bt_mesh_net_hbh_recv(struct bt_mesh_net_rx *rx,
 		LOG_DBG("Drop HBH message special case");
 		return;
 	}
-
 	if(cached->tx_buf->data == NULL) {
 		LOG_ERR("data is NULL");
+		while(true);
 		return;
 	}
 

@@ -104,6 +104,7 @@ static struct net_buf *bt_mesh_adv_create_from_pool(struct net_buf_pool *buf_poo
 	adv->type         = type;
 	adv->tag          = tag;
 	adv->xmit         = xmit;
+	atomic_set(&adv->busy, 0);
 
 	return buf;
 }
@@ -228,7 +229,8 @@ void bt_mesh_adv_send(struct net_buf *buf, const struct bt_mesh_send_cb *cb,
 
 	BT_MESH_ADV(buf)->cb = cb;
 	BT_MESH_ADV(buf)->cb_data = cb_data;
-	BT_MESH_ADV(buf)->busy = 1U;
+	atomic_inc(&BT_MESH_ADV(buf)->busy);
+	//BT_MESH_ADV(buf)->busy += 1U;
 
 	if (IS_ENABLED(CONFIG_BT_MESH_ADV_EXT_FRIEND_SEPARATE) &&
 	    BT_MESH_ADV(buf)->tag == BT_MESH_FRIEND_ADV) {
