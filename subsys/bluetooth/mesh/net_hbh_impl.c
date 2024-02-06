@@ -7,7 +7,7 @@
  *********************************************************************************
  * Project : HEIA-FR / tm_ble-mesh_dect-2020
  * @file   : net_hbh_impl.c
- * @brief  :
+ * @brief  : Implementation of the HBH retransmission protocol
  * @date   : 06.11.2023
  * @author : Louka Yerly (louka.yerly@gmail.com)
  ********************************************************************************/
@@ -51,8 +51,8 @@ LOG_MODULE_REGISTER(bt_mesh_net_hbh_impl);
 
 #define SEQ(pdu) (sys_get_be24(&pdu[2]))
 
-#define BT_MESH_NET_HBH_RTO_MSEC (300+(2-1)*50)
-static uint8_t bt_mesh_net_hbh_retransmission = 10;
+#define BT_MESH_NET_HBH_RTO_MSEC 30 //(300+(2-1)*50)
+static uint8_t bt_mesh_net_hbh_retransmission = 15;
 #define BT_MESH_NET_HBH_MAX_HOP_DELAY_MSEC 60
 #define BT_MESH_NET_HBH_MSG_CACHE_TIMEOUT_MSEC ((BT_MESH_NET_HBH_RTO_MSEC*\
 												((int64_t)bt_mesh_net_hbh_retransmission))*2\
@@ -191,30 +191,28 @@ static void retransmit(struct k_work *work) {
 	bool acked = false;
 	ITEM_LOCK(item);
 	{
+		if(item->tx_buf->data == NULL || item->tx_buf->ref == 0) {
+			LOG_ERR("Data in tx_buf not valid");
+			print_packet_info(item);
+			bt_mesh_net_hbh_free_item(item);
+			ITEM_UNLOCK(item);
+			return;
+		} else if(atomic_get(&BT_MESH_ADV(item->tx_buf)->busy)) {
+			/* Message is currently in queue to be send. Wait for another attempt */
+			k_work_reschedule(dwork, K_MSEC(BT_MESH_NET_HBH_RTO_MSEC));
+			ITEM_UNLOCK(item);
+			return;
+		}
 		acked = item->acked;
 		item->transmit_number++;
 		atomic_inc(&bt_mesh_net_hbh_number_of_transmission);
 		LOG_DBG("idx %i, buf %p", ARRAY_INDEX(net_hbh_item_arr, item), item->tx_buf);
-		if(item->tx_buf->data == NULL || item->tx_buf->ref == 0) {
-			LOG_ERR("data is null");
-			while(true);
-			print_packet_info(item);
-			k_work_cancel_delayable(&item->dwork);
-			bt_mesh_net_hbh_free_item(item);
-		} else {
-			if(atomic_get(&BT_MESH_ADV(item->tx_buf)->busy)) {
-				k_work_reschedule(dwork, K_MSEC(BT_MESH_NET_HBH_RTO_MSEC));
-				ITEM_UNLOCK(item);
-				return;
-			}
-			bt_mesh_adv_send(item->tx_buf, &cb, (void*)item);
-		}
+		bt_mesh_adv_send(item->tx_buf, &cb, (void*)item);
 	}
 	ITEM_UNLOCK(item);
 	
 	if(acked) {
-		/* He will never receive an ACK when the message is acked.
-		 */
+		/* He will never receive an ACK when the message is acked */
 		k_work_reschedule(dwork, K_MSEC(item_get_remaining_time_msec(item)));
 	} else {
 		k_work_reschedule(dwork, K_MSEC(BT_MESH_NET_HBH_RTO_MSEC));
@@ -270,7 +268,7 @@ static void bt_mesh_net_hbh_create_item(struct net_hbh_item **item,
 		if(buf == NULL) {
 			print_packet_info(init_item);
 			LOG_ERR("ADV buf is NULL");
-			while(true);
+			return;
 		}
 
 		if(bt_mesh_has_addr(init_item->rx.ctx.recv_dst)) {
@@ -387,18 +385,17 @@ void bt_mesh_net_hbh_recv(struct bt_mesh_net_rx *rx,
 	}
 
 	if(cached == NULL && buf == NULL) {
-		/**
-		 * This case happen when this is a retransmission of the a node.
+		/* This case happen when this is a retransmission of the a node.
 		 * The message is thus already in the bt_mesh_net::cache and the destination
 		 * address is not decrypted. Need to rely on the protocol and simply drop
 		 * the packet. 
 		 */
-		LOG_DBG("Drop HBH message special case");
+		LOG_ERR("Drop HBH message special case");
 		return;
 	}
+
 	if(cached->tx_buf->data == NULL) {
-		LOG_ERR("data is NULL");
-		while(true);
+		LOG_ERR("tx_buf data is null");
 		return;
 	}
 
