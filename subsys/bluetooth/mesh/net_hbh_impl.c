@@ -51,8 +51,8 @@ LOG_MODULE_REGISTER(bt_mesh_net_hbh_impl);
 
 #define SEQ(pdu) (sys_get_be24(&pdu[2]))
 
-#define BT_MESH_NET_HBH_RTO_MSEC 30 //(300+(2-1)*50)
-static uint8_t bt_mesh_net_hbh_retransmission = 15;
+#define BT_MESH_NET_HBH_RTO_MSEC (300+(2-1)*50)
+static uint8_t bt_mesh_net_hbh_retransmission = 10;
 #define BT_MESH_NET_HBH_MAX_HOP_DELAY_MSEC 60
 #define BT_MESH_NET_HBH_MSG_CACHE_TIMEOUT_MSEC ((BT_MESH_NET_HBH_RTO_MSEC*\
 												((int64_t)bt_mesh_net_hbh_retransmission))*2\
