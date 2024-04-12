@@ -277,7 +277,8 @@ uint8_t ll_adv_params_set(uint16_t interval, uint8_t adv_type,
 
 			adv_type = leg_adv_type_get(evt_prop);
 
-			adv->lll.phy_p = PHY_1M;
+			adv->lll.phy_p = PHY_CODED;
+			adv->lll.phy_flags = PHY_FLAGS_S8;
 		} else {
 			/* - Connectable and scannable not allowed;
 			 * - High duty cycle directed connectable not allowed
