@@ -381,7 +381,10 @@ int bt_mesh_scan_enable(void)
 		.type = active_scanning ? BT_HCI_LE_SCAN_ACTIVE :
 					  BT_HCI_LE_SCAN_PASSIVE,
 		.interval = MESH_SCAN_INTERVAL,
-		.window = MESH_SCAN_WINDOW
+		.window = MESH_SCAN_WINDOW,
+		.interval_coded = MESH_SCAN_INTERVAL,
+		.window_coded = MESH_SCAN_INTERVAL,
+		.options = BT_LE_SCAN_OPT_CODED | BT_LE_SCAN_OPT_NO_1M,
 	};
 	int err;
 
