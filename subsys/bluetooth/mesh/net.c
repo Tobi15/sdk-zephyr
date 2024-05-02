@@ -826,6 +826,27 @@ int bt_mesh_net_decode(struct net_buf_simple *in, enum bt_mesh_net_if net_if,
 	return 0;
 }
 
+static bool need_relay_lsn(struct bt_mesh_msg_ctx *ctx)
+{
+	/* Situation example:
+	 *  sink    node    node    node
+	 * (0x1)---(0x2)---(0x3)---(0x4)
+	 */
+	uint16_t local_addr = bt_mesh_primary_addr();
+
+	if(!BT_MESH_ADDR_IS_UNICAST(ctx->recv_dst)) {
+		return true;
+	}
+
+	if(ctx->recv_dst > local_addr && ctx->addr > local_addr) {
+		return false;
+	} else if(ctx->recv_dst < local_addr && ctx->addr < local_addr) {
+		return false;
+	}
+
+	return true;
+}
+
 void bt_mesh_net_recv(struct net_buf_simple *data, int8_t rssi,
 		      enum bt_mesh_net_if net_if)
 {
@@ -888,8 +909,8 @@ void bt_mesh_net_recv(struct net_buf_simple *data, int8_t rssi,
 	/* Relay if this was a group/virtual address, or if the destination
 	 * was neither a local element nor an LPN we're Friends for.
 	 */
-	if (!BT_MESH_ADDR_IS_UNICAST(rx.ctx.recv_dst) ||
-	    (!rx.local_match && !rx.friend_match)) {
+	if (need_relay_lsn(&rx.ctx) && (!BT_MESH_ADDR_IS_UNICAST(rx.ctx.recv_dst) ||
+	    (!rx.local_match && !rx.friend_match))) {
 		net_buf_simple_restore(&buf, &state);
 		bt_mesh_net_relay(&buf, &rx);
 	}
