@@ -699,6 +699,14 @@ enum {
 	 * @note Mutually exclusive with BT_LE_ADV_OPT_USE_IDENTITY.
 	 */
 	BT_LE_ADV_OPT_USE_NRPA = BIT(19),
+
+	/**
+	 * @brief Experimental: Advertising using a legacy long range custom concept.
+	 * Should be used with Mesh and long range
+	 * 
+	 * Customized by HEIA-FR
+	 */
+	BT_LE_ADV_OPT_USE_CUSTOM_LEGACY_CODDED = BIT(20),
 };
 
 /** LE Advertising Parameters. */

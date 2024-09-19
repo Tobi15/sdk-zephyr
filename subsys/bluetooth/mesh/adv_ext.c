@@ -440,6 +440,8 @@ void bt_mesh_adv_init(void)
 #endif
 	};
 
+	adv_param.options |= BT_LE_ADV_OPT_USE_CUSTOM_LEGACY_CODDED;
+
 	for (int i = 0; i < ARRAY_SIZE(advs); i++) {
 		(void)memcpy(&advs[i].adv_param, &adv_param, sizeof(adv_param));
 	}

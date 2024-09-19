@@ -1359,6 +1359,7 @@ struct bt_hci_cp_le_set_adv_set_random_addr {
 #define BT_HCI_LE_ADV_PROP_LEGACY               BIT(4)
 #define BT_HCI_LE_ADV_PROP_ANON                 BIT(5)
 #define BT_HCI_LE_ADV_PROP_TX_POWER             BIT(6)
+#define BT_HCI_LE_ADV_USE_CUSTOM_LEGACY_CODDED  BIT(7)
 
 #define BT_HCI_LE_PRIM_ADV_INTERVAL_MIN         0x000020
 #define BT_HCI_LE_PRIM_ADV_INTERVAL_MAX         0xFFFFFF

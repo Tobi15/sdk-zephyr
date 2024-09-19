@@ -1165,7 +1165,11 @@ static int le_ext_adv_param_set(struct bt_le_ext_adv *adv,
 	}
 
 	if (!(param->options & BT_LE_ADV_OPT_EXT_ADV)) {
+		//HEIA-FR custom legacy codded advertising flag
 		props |= BT_HCI_LE_ADV_PROP_LEGACY;
+		if(param->options & BT_LE_ADV_OPT_USE_CUSTOM_LEGACY_CODDED){
+			props |= BT_HCI_LE_ADV_USE_CUSTOM_LEGACY_CODDED;
+		}
 	}
 
 	if (param->options & BT_LE_ADV_OPT_USE_TX_POWER) {
