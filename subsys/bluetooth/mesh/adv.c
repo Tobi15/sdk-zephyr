@@ -304,9 +304,34 @@ int bt_mesh_adv_gatt_send(void)
 	return -ENOTSUP;
 }
 
+struct bt_mesh_cb_aux {
+	uint8_t adv_type;
+	bt_mesh_aux_scan_cb_t scan_cb_aux;
+};
+
+struct bt_mesh_cb_aux aux_cb = {
+	.adv_type = 0xFF,
+	.scan_cb_aux = NULL,
+};
+
+void bt_mesh_register_aux_scan_cb(uint8_t adv_type, bt_mesh_aux_scan_cb_t cb){
+	aux_cb.adv_type = adv_type;
+	aux_cb.scan_cb_aux = cb;
+}
+
+void bt_mesh_unregister_aux_scan_cb(){
+	aux_cb.adv_type = 0xFF;
+	aux_cb.scan_cb_aux = NULL;
+}
+
 static void bt_mesh_scan_cb(const bt_addr_le_t *addr, int8_t rssi,
 			    uint8_t adv_type, struct net_buf_simple *buf)
 {
+	if (aux_cb.scan_cb_aux != NULL){
+		if (adv_type == aux_cb.adv_type){
+			aux_cb.scan_cb_aux(addr, rssi, buf);
+		}
+	}
 	if (adv_type != BT_GAP_ADV_TYPE_ADV_NONCONN_IND) {
 		return;
 	}

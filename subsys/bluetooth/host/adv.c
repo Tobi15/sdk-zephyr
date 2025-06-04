@@ -1655,7 +1655,6 @@ int bt_le_ext_adv_start(struct bt_le_ext_adv *adv,
 			bt_conn_set_state(conn, BT_CONN_DISCONNECTED);
 			bt_conn_unref(conn);
 		}
-
 		return err;
 	}
 

@@ -246,7 +246,6 @@ static int adv_send(struct bt_mesh_ext_adv *ext_adv, struct bt_mesh_adv *adv)
 	ad.type = bt_mesh_adv_type[adv->ctx.type];
 	ad.data_len = adv->b.len;
 	ad.data = adv->b.data;
-
 	err = bt_data_send(ext_adv, num_events, adv_int, &ad, 1);
 	if (!err) {
 		ext_adv->adv = bt_mesh_adv_ref(adv);
@@ -431,6 +430,18 @@ int bt_mesh_adv_terminate(struct bt_mesh_adv *adv)
 
 void bt_mesh_adv_init(void)
 {
+
+#if defined(CONFIG_BT_MESH_ADV_EXT_GATT_SEPARATE)
+	struct bt_le_adv_param adv_param_gatt = {
+		.id = BT_ID_DEFAULT,
+		.interval_min = BT_MESH_ADV_SCAN_UNIT(ADV_INT_FAST_MS),
+		.interval_max = BT_MESH_ADV_SCAN_UNIT(ADV_INT_FAST_MS),
+#if defined(CONFIG_BT_MESH_DEBUG_USE_ID_ADDR)
+		.options = BT_LE_ADV_OPT_USE_IDENTITY,
+#endif
+	};
+#endif
+
 	struct bt_le_adv_param adv_param = {
 		.id = BT_ID_DEFAULT,
 		.interval_min = BT_MESH_ADV_SCAN_UNIT(ADV_INT_FAST_MS),
@@ -443,8 +454,20 @@ void bt_mesh_adv_init(void)
 	adv_param.options |= BT_LE_ADV_OPT_USE_CUSTOM_LEGACY_CODDED;
 
 	for (int i = 0; i < ARRAY_SIZE(advs); i++) {
-		(void)memcpy(&advs[i].adv_param, &adv_param, sizeof(adv_param));
+#if defined(CONFIG_BT_MESH_ADV_EXT_GATT_SEPARATE)
+		if(advs[i].tags & BT_MESH_ADV_TAG_BIT_PROXY){
+			(void)memcpy(&advs[i].adv_param, &adv_param_gatt, sizeof(adv_param_gatt));
+			printk("adv sid %d adv tag %d\n", advs[i].adv_param.sid, advs[i].tags);
+		}
+		else {
+#endif
+			(void)memcpy(&advs[i].adv_param, &adv_param, sizeof(adv_param));
+			printk("adv sid %d adv tag %d\n", advs[i].adv_param.sid, advs[i].tags);
+#if defined(CONFIG_BT_MESH_ADV_EXT_GATT_SEPARATE)
+		}
+#endif
 	}
+
 }
 
 static struct bt_mesh_ext_adv *adv_instance_find(struct bt_le_ext_adv *instance)

@@ -327,6 +327,7 @@ static int mbox_init(const struct device *instance)
 	k_work_queue_init(&data->mbox_wq);
 	k_work_queue_start(&data->mbox_wq, mbox_stack[conf->id], WQ_STACK_SIZE, prio, NULL);
 
+	k_thread_name_set(&data->mbox_wq.thread, "mbox_wq");
 	k_work_init(&data->mbox_work, mbox_callback_process);
 
 	err = mbox_register_callback(&conf->mbox_rx, mbox_callback, data);

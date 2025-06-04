@@ -50,4 +50,27 @@
 #include <zephyr/bluetooth/mesh/sol_pdu_rpl_cli.h>
 #include <zephyr/bluetooth/mesh/statistic.h>
 
+/**
+ * @brief Callback function type for auxiliary scan events.
+ *
+ * @param addr The Bluetooth LE address of the device.
+ * @param rssi The RSSI value of the received advertisement.
+ * @param buf  The buffer containing advertisement data.
+ */
+typedef void (*bt_mesh_aux_scan_cb_t)(const bt_addr_le_t *addr, int8_t rssi, struct net_buf_simple *buf);
+
+/**
+ * @brief Register a callback for auxiliary scan events.
+ *
+ * @param adv_type The advertisement type to filter.
+ * @param cb       The callback function to invoke for matching advertisements.
+ */
+void bt_mesh_register_aux_scan_cb(uint8_t adv_type, bt_mesh_aux_scan_cb_t cb);
+
+/**
+ * @brief Unregister a callback for auxiliary scan events.
+ *
+ */
+void bt_mesh_unregister_aux_scan_cb();
+
 #endif /* ZEPHYR_INCLUDE_BLUETOOTH_MESH_H_ */
