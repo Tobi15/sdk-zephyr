@@ -269,15 +269,15 @@ static inline void seg_tx_complete(struct seg_tx *tx, int err)
 {
 	const struct bt_mesh_send_cb *cb = tx->cb;
 	void *cb_data = tx->cb_data;
+	
 
 #if defined(CONFIG_APP_TUNNEL_BT_MESH_STATISTIC)
 #include "/workdir/my-workspace-hbi/hbi-node/app/include/hbi_node/hbi_statistic/ble_mesh_statistic_status_struct.h"
-
-	struct ble_mesh_statistic_status stat;
-	stat.attempts_left = MIN(tx->attempts_left, CONFIG_BT_MESH_SAR_TX_UNICAST_RETRANS_COUNT);
-	stat.attempts_left_without_progress = MIN(tx->attempts_left_without_progress, CONFIG_BT_MESH_SAR_TX_UNICAST_RETRANS_WITHOUT_PROG_COUNT);
-	stat.packet_id = (int32_t)tx->cb_data;
-	cb_data = (void*)&stat;
+	if (cb_data) {
+		struct ble_mesh_statistic_status* stat = (struct ble_mesh_statistic_status*)cb_data;
+		stat->attempts_left = MIN(tx->attempts_left, CONFIG_BT_MESH_SAR_TX_UNICAST_RETRANS_COUNT);
+		stat->attempts_left_without_progress = MIN(tx->attempts_left_without_progress, CONFIG_BT_MESH_SAR_TX_UNICAST_RETRANS_WITHOUT_PROG_COUNT);
+	}
 #endif
 
 	seg_tx_unblock_check(tx);
