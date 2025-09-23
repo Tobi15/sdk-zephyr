@@ -826,12 +826,12 @@ int bt_mesh_net_decode(struct net_buf_simple *in, enum bt_mesh_net_if net_if,
 	return 0;
 }
 
-static bool need_relay_lsn(struct bt_mesh_msg_ctx *ctx)
+/*static bool need_relay_lsn(struct bt_mesh_msg_ctx *ctx)
 {
-	/* Situation example:
-	 *  sink    node    node    node
-	 * (0x1)---(0x2)---(0x3)---(0x4)
-	 */
+	// Situation example:
+	//  sink    node    node    node
+	// (0x1)---(0x2)---(0x3)---(0x4)
+	//
 	uint16_t local_addr = bt_mesh_primary_addr();
 
 	if(!BT_MESH_ADDR_IS_UNICAST(ctx->recv_dst)) {
@@ -845,7 +845,7 @@ static bool need_relay_lsn(struct bt_mesh_msg_ctx *ctx)
 	}
 
 	return true;
-}
+}*/
 
 void bt_mesh_net_recv(struct net_buf_simple *data, int8_t rssi,
 		      enum bt_mesh_net_if net_if)

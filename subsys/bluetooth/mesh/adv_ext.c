@@ -457,12 +457,10 @@ void bt_mesh_adv_init(void)
 #if defined(CONFIG_BT_MESH_ADV_EXT_GATT_SEPARATE)
 		if(advs[i].tags & BT_MESH_ADV_TAG_BIT_PROXY){
 			(void)memcpy(&advs[i].adv_param, &adv_param_gatt, sizeof(adv_param_gatt));
-			printk("adv sid %d adv tag %d\n", advs[i].adv_param.sid, advs[i].tags);
 		}
 		else {
 #endif
 			(void)memcpy(&advs[i].adv_param, &adv_param, sizeof(adv_param));
-			printk("adv sid %d adv tag %d\n", advs[i].adv_param.sid, advs[i].tags);
 #if defined(CONFIG_BT_MESH_ADV_EXT_GATT_SEPARATE)
 		}
 #endif
